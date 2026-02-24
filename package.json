@@ -1,0 +1,38 @@
+{
+  "name": "voiceflow",
+  "version": "1.0.0",
+  "description": "Desktop voice dictation with verbal commands — inspired by Wispr Flow",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
+    "dev:renderer": "vite --config src/renderer/vite.config.ts",
+    "dev:main": "tsc -p tsconfig.main.json --watch & sleep 3 && electron .",
+    "build": "npm run build:renderer && npm run build:main",
+    "build:renderer": "vite build --config src/renderer/vite.config.ts",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:preload": "tsc -p tsconfig.preload.json",
+    "package": "npm run build && electron-builder",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "postinstall": "electron-rebuild -f -w @nut-tree-fork/nut-js || true"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.0",
+    "electron-store": "^8.2.0",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.0",
+    "electron-rebuild": "^3.2.9",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
+  }
+}

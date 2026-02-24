@@ -1,0 +1,29 @@
+appId: com.voiceflow.app
+productName: VoiceFlow
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - resources/**/*
+  - "!node_modules/**/*.{md,txt,map}"
+mac:
+  category: public.app-category.utilities
+  target:
+    - dmg
+    - zip
+  icon: resources/icons/icon.icns
+win:
+  target:
+    - nsis
+    - portable
+  icon: resources/icons/icon.ico
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: resources/icons
+  category: Utility
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

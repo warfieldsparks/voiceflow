@@ -1,0 +1,106 @@
+/* ── Recording Overlay ── */
+.overlay-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  -webkit-app-region: drag;
+}
+
+.overlay-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(22, 22, 43, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(66, 133, 244, 0.3);
+  border-radius: 12px;
+  padding: 10px 16px;
+  min-width: 360px;
+  max-width: 420px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  -webkit-app-region: no-drag;
+}
+
+/* ── Status Dot ── */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: background-color 0.3s;
+}
+
+.status-dot.pulse {
+  animation: dot-pulse 1.5s infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.status-label {
+  font-size: 12px;
+  color: #999;
+  font-weight: 500;
+  min-width: 70px;
+}
+
+/* ── Center Area ── */
+.overlay-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+}
+
+.processing-text {
+  color: #fbbc04;
+  font-size: 13px;
+  animation: fade-pulse 1.5s infinite;
+}
+
+@keyframes fade-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.transcription-text {
+  color: #e0e0e0;
+  font-size: 13px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-text {
+  color: #ea4335;
+  font-size: 12px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Hotkey Badge ── */
+.overlay-hotkey {
+  font-size: 10px;
+  color: #666;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  flex-shrink: 0;
+}
