@@ -9,15 +9,26 @@ let settingsWindow: BrowserWindow | null = null;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
+/**
+ * In dev:  __dirname = <project>/dist/main/main
+ * Packaged: app.getAppPath() = <...>/resources/app.asar
+ *
+ * We use app.getAppPath() as the root so paths work in both cases.
+ */
+function getAppRoot(): string {
+  return app.getAppPath();
+}
+
 function getPreloadPath(): string {
-  return join(__dirname, '../preload/index.js');
+  return join(getAppRoot(), 'dist', 'main', 'preload', 'index.js');
 }
 
 function getRendererUrl(hash = ''): string {
   if (isDev) {
     return `http://localhost:5173${hash ? '#' + hash : ''}`;
   }
-  return `file://${join(__dirname, '../renderer/index.html')}${hash ? '#' + hash : ''}`;
+  const htmlPath = join(getAppRoot(), 'dist', 'renderer', 'index.html');
+  return `file://${htmlPath}${hash ? '#' + hash : ''}`;
 }
 
 // ── Overlay Window ──
@@ -30,11 +41,14 @@ export function createOverlayWindow(): BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth } = primaryDisplay.workAreaSize;
 
+  log.info(`Preload path: ${getPreloadPath()}`);
+  log.info(`Renderer URL: ${getRendererUrl('overlay')}`);
+
   overlayWindow = new BrowserWindow({
-    width: 400,
-    height: 80,
-    x: Math.round((screenWidth - 400) / 2),
-    y: 40,
+    width: 420,
+    height: 64,
+    x: Math.round((screenWidth - 420) / 2),
+    y: 20,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -42,21 +56,27 @@ export function createOverlayWindow(): BrowserWindow {
     resizable: false,
     focusable: false,
     show: false,
+    hasShadow: false,
     webPreferences: {
       preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
   overlayWindow.loadURL(getRendererUrl('overlay'));
 
-  // Make click-through on supported platforms
   overlayWindow.setIgnoreMouseEvents(false);
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;
+  });
+
+  // Log load errors
+  overlayWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+    log.error(`Overlay failed to load: ${code} ${desc}`);
   });
 
   log.info('Overlay window created');
@@ -112,8 +132,12 @@ export function createSettingsWindow(): BrowserWindow {
     settingsWindow = null;
   });
 
-  // Remove menu bar
   settingsWindow.setMenuBarVisibility(false);
+
+  // Log load errors
+  settingsWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+    log.error(`Settings failed to load: ${code} ${desc}`);
+  });
 
   log.info('Settings window created');
   return settingsWindow;

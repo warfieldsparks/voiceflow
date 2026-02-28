@@ -1,30 +1,20 @@
 import { TranscriptionProvider, TranscriptionResult, TranscriptionMode } from '../../../shared/types';
-import { WhisperCloudProvider } from './WhisperCloudProvider';
 import { WhisperLocalProvider } from './WhisperLocalProvider';
+import { GroqProvider } from './GroqProvider';
 import { getSetting } from '../settings/SettingsStore';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('transcription');
 
-let cloudProvider: WhisperCloudProvider | null = null;
-let localProvider: WhisperLocalProvider | null = null;
-
-function getProvider(mode?: TranscriptionMode): TranscriptionProvider {
+function createProvider(): TranscriptionProvider {
   const settings = getSetting('transcription');
-  const activeMode = mode ?? settings.mode;
 
-  if (activeMode === 'cloud') {
-    if (!cloudProvider) {
-      cloudProvider = new WhisperCloudProvider(settings.apiKey);
-    } else {
-      cloudProvider.updateApiKey(settings.apiKey);
-    }
-    return cloudProvider;
+  if (settings.mode === 'groq') {
+    log.info(`Creating Groq provider (key: ${settings.groqApiKey ? 'set' : 'not set'})`);
+    return new GroqProvider(settings.groqApiKey);
   } else {
-    if (!localProvider) {
-      localProvider = new WhisperLocalProvider(settings.localModel);
-    }
-    return localProvider;
+    log.info(`Creating local provider (model: ${settings.localModel})`);
+    return new WhisperLocalProvider(settings.localModel);
   }
 }
 
@@ -32,28 +22,36 @@ export async function transcribe(
   audioBuffer: ArrayBuffer,
   format = 'webm'
 ): Promise<TranscriptionResult> {
-  const provider = getProvider();
-  const available = await provider.isAvailable();
+  // Always create fresh provider to pick up latest settings
+  const provider = createProvider();
+  const settings = getSetting('transcription');
 
+  const available = await provider.isAvailable();
   if (!available) {
-    const mode = getSetting('transcription').mode;
-    throw new Error(
-      mode === 'cloud'
-        ? 'OpenAI API key is not configured. Set it in Settings > Whisper.'
-        : 'Local whisper model is not downloaded. Download it in Settings > Whisper.'
-    );
+    const messages: Record<string, string> = {
+      groq: 'Groq API key is not configured. Set it in Settings > Whisper.',
+      local: 'Whisper engine not found. Try reinstalling VoiceFlow.',
+    };
+    throw new Error(messages[settings.mode] || 'Transcription not available.');
   }
 
-  log.info('Starting transcription...');
+  log.info(`Starting transcription (mode: ${settings.mode}, format: ${format}, size: ${audioBuffer.byteLength} bytes)`);
   const start = Date.now();
-  const result = await provider.transcribe(audioBuffer, format);
-  log.info(`Transcription complete in ${Date.now() - start}ms: "${result.text}"`);
-  return result;
+
+  try {
+    const result = await provider.transcribe(audioBuffer, format);
+    log.info(`Transcription complete in ${Date.now() - start}ms: "${result.text}"`);
+    return result;
+  } catch (err) {
+    const elapsed = Date.now() - start;
+    log.error(`Transcription failed after ${elapsed}ms:`, err);
+    throw err;
+  }
 }
 
 export async function isTranscriptionReady(): Promise<boolean> {
   try {
-    const provider = getProvider();
+    const provider = createProvider();
     return await provider.isAvailable();
   } catch {
     return false;

@@ -16,9 +16,40 @@ export function initSettingsStore(): Store<VoiceFlowSettings> {
       schema: settingsSchema as any,
       clearInvalidConfig: true,
     });
+
+    // Migrate v1 settings: remove stale GPU/cloud fields, apply new defaults
+    migrateSettings(store);
+
     log.info('Settings store initialized');
   }
   return store;
+}
+
+function migrateSettings(s: Store<VoiceFlowSettings>): void {
+  const raw = s.store as any;
+
+  let migrated = false;
+
+  // Remove stale fields from old schema
+  if ('apiKey' in (raw.transcription || {})) {
+    delete raw.transcription.apiKey;
+    migrated = true;
+  }
+  if ('useGpu' in (raw.transcription || {})) {
+    delete raw.transcription.useGpu;
+    migrated = true;
+  }
+
+  // If mode was 'cloud' (removed), reset to default
+  if (raw.transcription?.mode === 'cloud') {
+    raw.transcription.mode = DEFAULT_SETTINGS.transcription.mode;
+    migrated = true;
+  }
+
+  if (migrated) {
+    s.set('transcription', raw.transcription);
+    log.info('Migrated settings: removed stale GPU/cloud fields');
+  }
 }
 
 export function getSettings(): VoiceFlowSettings {

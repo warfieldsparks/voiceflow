@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "outDir": "dist/preload",
+    "outDir": "dist/main",
     "rootDir": "src",
     "sourceMap": true,
     "declaration": false

@@ -6,12 +6,17 @@ export const settingsSchema = {
     type: 'string' as const,
     default: DEFAULT_SETTINGS.hotkey,
   },
+  hotkeyMode: {
+    type: 'string' as const,
+    enum: ['toggle', 'hold'],
+    default: DEFAULT_SETTINGS.hotkeyMode,
+  },
   transcription: {
     type: 'object' as const,
     default: DEFAULT_SETTINGS.transcription,
     properties: {
-      mode: { type: 'string', enum: ['cloud', 'local'] },
-      apiKey: { type: 'string' },
+      mode: { type: 'string', enum: ['local', 'groq'] },
+      groqApiKey: { type: 'string' },
       localModel: { type: 'string' },
     },
   },

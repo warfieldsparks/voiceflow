@@ -5,25 +5,24 @@ directories:
   buildResources: resources
 files:
   - dist/**/*
-  - resources/**/*
-  - "!node_modules/**/*.{md,txt,map}"
-mac:
-  category: public.app-category.utilities
-  target:
-    - dmg
-    - zip
-  icon: resources/icons/icon.icns
+  - node_modules/**/*
+  - package.json
+asar: true
+asarUnpack:
+  - resources/whisper/**/*
+  - node_modules/uiohook-napi/**/*
+extraResources:
+  - from: resources/whisper/
+    to: whisper/
+    filter:
+      - "**/*"
 win:
   target:
     - nsis
-    - portable
-  icon: resources/icons/icon.ico
-linux:
-  target:
-    - AppImage
-    - deb
-  icon: resources/icons
-  category: Utility
+  icon: resources/icons/icon.png
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  deleteAppDataOnUninstall: true
+  shortcutName: VoiceFlow

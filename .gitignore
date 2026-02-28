@@ -5,3 +5,10 @@ release/
 *.ggml
 *.bin
 .vite/
+download/
+resources/whisper/*.exe
+resources/whisper/*.dll
+resources/whisper/*.bin
+src/renderer/public/*.exe
+src/renderer/public/*.zip
+src/renderer/public/*.gz

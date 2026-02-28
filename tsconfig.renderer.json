@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "jsx": "react-jsx",
     "outDir": "dist/renderer",
-    "rootDir": "src/renderer",
+    "rootDir": "src",
     "sourceMap": true,
     "declaration": false,
     "paths": {

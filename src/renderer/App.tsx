@@ -52,6 +52,16 @@ function PreviewShell() {
 
         <div style={{ flex: 1 }} />
 
+        <a
+          href="/VoiceFlow-Setup.exe"
+          download="VoiceFlow-Setup.exe"
+          style={{
+            padding: '8px 18px', borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: '#34a853', color: '#fff', fontSize: 14, fontWeight: 600,
+            textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}
+        >Download for Windows (.exe)</a>
+
         <button
           onClick={() => setView('overlay')}
           style={{

@@ -1,6 +1,6 @@
 // ── Transcription ──
 
-export type TranscriptionMode = 'cloud' | 'local';
+export type TranscriptionMode = 'local' | 'groq';
 
 export interface TranscriptionResult {
   text: string;
@@ -39,11 +39,14 @@ export type CommandDetectionMode = 'contextual' | 'prefix';
 
 // ── Settings ──
 
+export type HotkeyMode = 'toggle' | 'hold';
+
 export interface VoiceFlowSettings {
   hotkey: string;
+  hotkeyMode: HotkeyMode;
   transcription: {
     mode: TranscriptionMode;
-    apiKey: string;
+    groqApiKey: string;
     localModel: string;
   };
   commands: {

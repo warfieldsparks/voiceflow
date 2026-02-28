@@ -12,6 +12,7 @@ export const IPC = {
 
   // Transcription
   TRANSCRIBE: 'transcribe:run',
+  TRANSCRIPTION_CANCEL: 'transcription:cancel',
   TRANSCRIPTION_RESULT: 'transcription:result',
   TRANSCRIPTION_ERROR: 'transcription:error',
 
@@ -40,16 +41,24 @@ export const IPC = {
   // Window
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_CLOSE: 'window:close',
+
+  // Diagnostics
+  DIAGNOSTIC_RUN: 'diagnostic:run',
+  DIAGNOSTIC_TRANSCRIBE_TEST: 'diagnostic:transcribeTest',
+
+  // Recording state (pull)
+  RECORDING_GET_STATE: 'recording:getState',
 } as const;
 
-export const DEFAULT_HOTKEY = 'Ctrl+Shift+Space';
+export const DEFAULT_HOTKEY = 'Alt+Z';
 
 export const DEFAULT_SETTINGS = {
   hotkey: DEFAULT_HOTKEY,
+  hotkeyMode: 'hold' as const,
   transcription: {
-    mode: 'cloud' as const,
-    apiKey: '',
-    localModel: 'base',
+    mode: 'groq' as const,
+    groqApiKey: '',
+    localModel: 'small.en',
   },
   commands: {
     detectionMode: 'contextual' as const,
@@ -59,8 +68,8 @@ export const DEFAULT_SETTINGS = {
   },
   audio: {
     inputDeviceId: 'default',
-    silenceThreshold: 0.01,
-    autoStopAfterSilence: 3000,
+    silenceThreshold: 0.02,
+    autoStopAfterSilence: 5000,
   },
   ui: {
     overlayPosition: 'top' as const,

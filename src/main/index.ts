@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import { createTray, updateTrayState, destroyTray } from './tray';
-import { registerHotkey, unregisterAll } from './globalHotkey';
+import { registerHotkey, unregisterAll, updateHotkeyMode } from './globalHotkey';
 import { registerIpcHandlers, broadcastToRenderers } from './ipc-handlers';
 import {
   createOverlayWindow,
@@ -12,9 +12,10 @@ import {
 } from './window-manager';
 import { initSettingsStore, getSetting } from './services/settings/SettingsStore';
 import { transcribe } from './services/transcription/TranscriptionService';
+import { shutdownWhisperServer } from './services/transcription/WhisperLocalProvider';
 import { CommandParser } from './services/commands/CommandParser';
 import { ActionExecutor } from './services/keyboard/ActionExecutor';
-import { RecordingState } from '../shared/types';
+import { RecordingState, HotkeyMode } from '../shared/types';
 import { IPC } from '../shared/constants';
 import { createLogger } from './utils/logger';
 
@@ -33,12 +34,8 @@ if (!gotLock) {
 }
 
 app.on('second-instance', () => {
-  // Focus the settings window if it exists
-  const wins = BrowserWindow.getAllWindows();
-  if (wins.length > 0) {
-    if (wins[0].isMinimized()) wins[0].restore();
-    wins[0].focus();
-  }
+  // Show/focus the settings window — create one if it was closed
+  createSettingsWindow();
 });
 
 // ── App Lifecycle ──
@@ -71,6 +68,12 @@ app.on('ready', async () => {
   // Create overlay window (hidden)
   createOverlayWindow();
 
+  // Show settings window on first launch so user sees the app
+  const uiSettings = getSetting('ui');
+  if (!uiSettings.startMinimized) {
+    createSettingsWindow();
+  }
+
   // Create system tray
   createTray({
     onToggleRecording: toggleRecording,
@@ -78,9 +81,22 @@ app.on('ready', async () => {
     onQuit: () => app.quit(),
   });
 
-  // Register global hotkey
+  // Register global hotkey with uiohook (supports Win key + proper hold-to-record)
   const hotkey = getSetting('hotkey');
-  registerHotkey(hotkey, toggleRecording);
+  const hotkeyModeVal = (getSetting('hotkeyMode') as HotkeyMode) || 'toggle';
+  const hotkeyOk = registerHotkey(hotkey, toggleRecording, {
+    mode: hotkeyModeVal,
+    onStart: startRecording,
+    onStop: stopRecording,
+  });
+  if (!hotkeyOk) {
+    log.warn(`Hotkey "${hotkey}" not recognized, falling back to Ctrl+Shift+Space`);
+    registerHotkey('Ctrl+Shift+Space', toggleRecording, {
+      mode: hotkeyModeVal,
+      onStart: startRecording,
+      onStop: stopRecording,
+    });
+  }
 
   log.info('VoiceFlow ready');
 });
@@ -89,6 +105,7 @@ app.on('will-quit', () => {
   unregisterAll();
   destroyTray();
   destroyAllWindows();
+  shutdownWhisperServer();
 });
 
 app.on('window-all-closed', () => {
@@ -122,8 +139,12 @@ function startRecording(): void {
   setRecordingState('recording');
   showOverlay();
 
-  // Tell renderer to start capturing audio
-  broadcastToRenderers(IPC.RECORDING_START);
+  // Send directly to overlay in case the broadcast above was missed (window throttled)
+  const overlay = getOverlayWindow();
+  if (overlay && !overlay.isDestroyed()) {
+    overlay.webContents.send(IPC.RECORDING_STATE, 'recording');
+    overlay.webContents.send(IPC.RECORDING_START);
+  }
 }
 
 function stopRecording(): void {
@@ -137,10 +158,29 @@ function stopRecording(): void {
 // Handle audio data from renderer
 import { ipcMain } from 'electron';
 
-ipcMain.on(IPC.AUDIO_DATA, async (_event, audioBuffer: ArrayBuffer, format: string) => {
+// Allow renderer to pull current recording state (belt-and-suspenders)
+ipcMain.handle(IPC.RECORDING_GET_STATE, () => recordingState);
+
+let cancelled = false;
+
+ipcMain.on(IPC.TRANSCRIPTION_CANCEL, () => {
+  log.info('Transcription cancelled by user');
+  cancelled = true;
+  setRecordingState('idle');
+  hideOverlay();
+});
+
+ipcMain.on(IPC.AUDIO_DATA, async (_event, audioBuffer: ArrayBuffer, _format: string) => {
+  cancelled = false;
+
   try {
-    // Transcribe
-    const result = await transcribe(audioBuffer, format);
+    // Audio arrives as WAV (16kHz mono PCM) from renderer — no conversion needed
+    const result = await transcribe(audioBuffer, 'wav');
+
+    if (cancelled) {
+      log.info('Transcription result discarded (cancelled)');
+      return;
+    }
 
     if (result.text.trim()) {
       // Parse commands
@@ -165,9 +205,12 @@ ipcMain.on(IPC.AUDIO_DATA, async (_event, audioBuffer: ArrayBuffer, format: stri
       hideOverlay();
     }
   } catch (err) {
+    if (cancelled) return;
     log.error('Pipeline error', err);
     broadcastToRenderers(IPC.TRANSCRIPTION_ERROR, (err as Error).message);
   } finally {
-    setRecordingState('idle');
+    if (!cancelled) {
+      setRecordingState('idle');
+    }
   }
 });

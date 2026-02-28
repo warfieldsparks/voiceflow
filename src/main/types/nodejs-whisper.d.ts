@@ -1,16 +1,10 @@
-declare module 'nodejs-whisper' {
-  interface WhisperOptions {
-    modelName?: string;
-    autoDownloadModelName?: string;
-    whisperOptions?: {
-      outputInText?: boolean;
-      language?: string;
-    };
-  }
-
-  interface WhisperResult {
-    speech: string;
-  }
-
-  export function nodewhisper(filePath: string, options: WhisperOptions): Promise<WhisperResult[]>;
+declare module '@xenova/transformers' {
+  export function pipeline(
+    task: string,
+    model: string,
+    options?: {
+      quantized?: boolean;
+      progress_callback?: (progress: any) => void;
+    }
+  ): Promise<any>;
 }
