@@ -1,41 +1,23 @@
-import { TranscriptionProvider, TranscriptionResult, TranscriptionMode } from '../../../shared/types';
-import { WhisperLocalProvider } from './WhisperLocalProvider';
+import { TranscriptionResult } from '../../../shared/types';
 import { GroqProvider } from './GroqProvider';
 import { getSetting } from '../settings/SettingsStore';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('transcription');
 
-function createProvider(): TranscriptionProvider {
-  const settings = getSetting('transcription');
-
-  if (settings.mode === 'groq') {
-    log.info(`Creating Groq provider (key: ${settings.groqApiKey ? 'set' : 'not set'})`);
-    return new GroqProvider(settings.groqApiKey);
-  } else {
-    log.info(`Creating local provider (model: ${settings.localModel})`);
-    return new WhisperLocalProvider(settings.localModel);
-  }
-}
-
 export async function transcribe(
   audioBuffer: ArrayBuffer,
-  format = 'webm'
+  format = 'wav'
 ): Promise<TranscriptionResult> {
-  // Always create fresh provider to pick up latest settings
-  const provider = createProvider();
   const settings = getSetting('transcription');
+  const provider = new GroqProvider(settings.groqApiKey);
 
   const available = await provider.isAvailable();
   if (!available) {
-    const messages: Record<string, string> = {
-      groq: 'Groq API key is not configured. Set it in Settings > Whisper.',
-      local: 'Whisper engine not found. Try reinstalling VoiceFlow.',
-    };
-    throw new Error(messages[settings.mode] || 'Transcription not available.');
+    throw new Error('Groq API key is not configured. Set it in Settings > Whisper.');
   }
 
-  log.info(`Starting transcription (mode: ${settings.mode}, format: ${format}, size: ${audioBuffer.byteLength} bytes)`);
+  log.info(`Starting transcription (format: ${format}, size: ${audioBuffer.byteLength} bytes)`);
   const start = Date.now();
 
   try {
@@ -51,8 +33,8 @@ export async function transcribe(
 
 export async function isTranscriptionReady(): Promise<boolean> {
   try {
-    const provider = createProvider();
-    return await provider.isAvailable();
+    const settings = getSetting('transcription');
+    return !!settings.groqApiKey;
   } catch {
     return false;
   }

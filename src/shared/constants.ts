@@ -33,11 +33,6 @@ export const IPC = {
   // Audio devices
   AUDIO_DEVICES: 'audio:devices',
 
-  // Models
-  MODEL_LIST: 'model:list',
-  MODEL_DOWNLOAD: 'model:download',
-  MODEL_DOWNLOAD_PROGRESS: 'model:downloadProgress',
-
   // Window
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_CLOSE: 'window:close',
@@ -58,7 +53,6 @@ export const DEFAULT_SETTINGS = {
   transcription: {
     mode: 'groq' as const,
     groqApiKey: '',
-    localModel: 'small.en',
   },
   commands: {
     detectionMode: 'contextual' as const,

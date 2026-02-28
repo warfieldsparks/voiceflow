@@ -40,9 +40,15 @@ function migrateSettings(s: Store<VoiceFlowSettings>): void {
     migrated = true;
   }
 
-  // If mode was 'cloud' (removed), reset to default
-  if (raw.transcription?.mode === 'cloud') {
-    raw.transcription.mode = DEFAULT_SETTINGS.transcription.mode;
+  // If mode was 'cloud' or 'local' (removed), reset to groq
+  if (raw.transcription?.mode === 'cloud' || raw.transcription?.mode === 'local') {
+    raw.transcription.mode = 'groq';
+    migrated = true;
+  }
+
+  // Remove stale localModel field
+  if ('localModel' in (raw.transcription || {})) {
+    delete raw.transcription.localModel;
     migrated = true;
   }
 

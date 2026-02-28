@@ -14,7 +14,7 @@ npx electron-builder --win       # Windows installer → release/
 ## How It Works
 
 ```
-Hold Alt+Z → Record audio (16kHz WAV) → Transcribe (Groq/local Whisper)
+Hold Alt+Z → Record audio (16kHz WAV) → Transcribe (Groq Whisper API)
   → Parse commands ("enter","period") → Inject text (clipboard paste) + keys (nut-js)
 ```
 
@@ -30,7 +30,7 @@ Hold Alt+Z → Record audio (16kHz WAV) → Transcribe (Groq/local Whisper)
 
 - **Hotkey**: Alt+Z
 - **Mode**: Hold-to-talk
-- **Transcription**: Groq cloud (free, ~0.5s) — also supports local whisper-server
+- **Transcription**: Groq cloud (free, ~0.5s)
 - **Commands**: Contextual detection (~60 built-in commands)
 - **Text injection**: Clipboard paste (instant)
 
@@ -44,9 +44,8 @@ src/main/window-manager.ts           # Overlay (420x64) + settings windows
 src/main/tray.ts                     # System tray
 
 src/main/services/
-  transcription/TranscriptionService.ts  # Factory: groq vs local
+  transcription/TranscriptionService.ts  # Transcription entry point
   transcription/GroqProvider.ts          # Groq Whisper API
-  transcription/WhisperLocalProvider.ts  # whisper-server (port 18080) + CLI fallback
   commands/CommandParser.ts              # Trie + heuristic scoring
   commands/CommandRegistry.ts            # Trie-based phrase lookup
   commands/SmartDetection.ts             # Contextual scoring heuristics
@@ -69,17 +68,14 @@ src/shared/command-definitions.ts    # ~60 built-in commands
 2. **Audio capture** → getUserMedia → AudioContext(16kHz) → ScriptProcessorNode → PCM chunks
 3. **Hotkey release** → `stopRecording()` → broadcast RECORDING_STOP
 4. **WAV encoding** → renderer builds WAV from PCM → sends via IPC
-5. **Transcribe** → Groq API or local whisper-server
+5. **Transcribe** → Groq Whisper API
 6. **Parse** → trie lookup + heuristic scoring → text/command segments
 7. **Execute** → hide overlay → 150ms delay → paste text + press keys
 8. **Done** → broadcast result → set state idle
 
-## Transcription Providers
+## Transcription
 
-| Provider | Speed | Notes |
-|----------|-------|-------|
-| **Groq** (default) | ~0.5s | Free API, whisper-large-v3-turbo, 2000 req/day |
-| **Local** | 2-5s | whisper-server on port 18080, small.en model (466MB) |
+Groq Cloud only — free API, whisper-large-v3-turbo, ~0.5s, 2000 req/day.
 
 ## Hotkey Presets
 
@@ -104,7 +100,7 @@ Preload exposes 23 methods on `window.voiceflow`. All `on*` methods return clean
 - **New IPC channel**: constants.ts → ipc-handlers.ts → preload/index.ts → renderer
 - **New command**: Add to `command-definitions.ts`
 - **New hotkey preset**: `globalHotkey.ts` PRESETS + `HotkeyConfig.tsx`
-- **New transcription provider**: Implement `TranscriptionProvider` → factory → schema → UI
+- **New transcription provider**: Implement `TranscriptionProvider` → TranscriptionService.ts → schema → UI
 - **New setting**: types.ts → constants.ts → SettingsSchema.ts → migration → UI
 
 ## Detailed Docs

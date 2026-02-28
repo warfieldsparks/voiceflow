@@ -12,7 +12,6 @@ import {
 } from './window-manager';
 import { initSettingsStore, getSetting } from './services/settings/SettingsStore';
 import { transcribe } from './services/transcription/TranscriptionService';
-import { shutdownWhisperServer } from './services/transcription/WhisperLocalProvider';
 import { CommandParser } from './services/commands/CommandParser';
 import { ActionExecutor } from './services/keyboard/ActionExecutor';
 import { RecordingState, HotkeyMode } from '../shared/types';
@@ -105,7 +104,6 @@ app.on('will-quit', () => {
   unregisterAll();
   destroyTray();
   destroyAllWindows();
-  shutdownWhisperServer();
 });
 
 app.on('window-all-closed', () => {

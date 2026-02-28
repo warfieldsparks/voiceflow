@@ -41,12 +41,9 @@ hello world.
 how are you?
 ```
 
-## Transcription Engines
+## Transcription
 
-| Engine | Speed | Accuracy | Setup |
-|--------|-------|----------|-------|
-| **Groq Cloud** (default) | ~0.5s | Best (large-v3-turbo) | Free API key from groq.com |
-| **Local** | 2-5s | Good (small.en) | No setup, bundled |
+Uses **Groq Cloud** (free API) with Whisper large-v3-turbo. Near-instant (~0.5s), 2000 requests/day free tier. Get a key at [console.groq.com/keys](https://console.groq.com/keys).
 
 ## Hotkey Presets
 
@@ -96,7 +93,6 @@ Tray icon → Settings, or auto-opens on first launch.
 - **React 18 + Vite 6** — renderer UI
 - **uiohook-napi** — global hotkeys (Win key support, hold-to-record)
 - **@nut-tree-fork/nut-js** — keyboard simulation
-- **whisper.cpp** — local speech-to-text (persistent server on port 18080)
-- **Groq API** — cloud speech-to-text (Whisper large-v3-turbo)
+- **Groq API** — speech-to-text (Whisper large-v3-turbo)
 - **electron-store** — settings persistence
 - **electron-builder** — Windows installer packaging

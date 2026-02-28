@@ -2,13 +2,8 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { IPC } from '../shared/constants';
 import { transcribe, isTranscriptionReady } from './services/transcription/TranscriptionService';
 import { getSettings, getSetting, setSetting, setSettings, resetSettings } from './services/settings/SettingsStore';
-import { listModels, downloadModel } from './services/transcription/ModelManager';
 import { updateHotkey, updateHotkeyMode, getCurrentHotkey, getCurrentMode } from './globalHotkey';
-import { shutdownWhisperServer } from './services/transcription/WhisperLocalProvider';
 import { createLogger } from './utils/logger';
-import { existsSync, readdirSync } from 'fs';
-import { join } from 'path';
-import { execFile } from 'child_process';
 
 const log = createLogger('ipc');
 
@@ -34,12 +29,6 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC.SETTINGS_SET, async (_event, key: string, value: any) => {
-    // Read old value BEFORE saving for change detection
-    let prevTranscription: any = null;
-    if (key === 'transcription') {
-      prevTranscription = getSetting('transcription');
-    }
-
     setSetting(key as any, value);
 
     // Re-register hotkey when it changes
@@ -54,36 +43,12 @@ export function registerIpcHandlers(): void {
       log.info(`Hotkey mode updated to "${value}"`);
     }
 
-    // Restart whisper-server when mode setting changes
-    if (key === 'transcription' && prevTranscription && value && typeof value === 'object') {
-      if (value.mode !== prevTranscription.mode) {
-        log.info(`Transcription mode changed (${prevTranscription.mode} → ${value.mode}), restarting whisper-server`);
-        shutdownWhisperServer().catch(() => {});
-      }
-    }
-
     return true;
   });
 
   ipcMain.handle(IPC.SETTINGS_RESET, async () => {
     resetSettings();
     return getSettings();
-  });
-
-  // ── Models ──
-  ipcMain.handle(IPC.MODEL_LIST, async () => {
-    return listModels();
-  });
-
-  ipcMain.handle(IPC.MODEL_DOWNLOAD, async (event, modelName: string) => {
-    try {
-      const path = await downloadModel(modelName, (percent) => {
-        event.sender.send(IPC.MODEL_DOWNLOAD_PROGRESS, { modelName, percent });
-      });
-      return { success: true, path };
-    } catch (err) {
-      return { success: false, error: (err as Error).message };
-    }
   });
 
   // ── App status ──
@@ -97,38 +62,14 @@ export function registerIpcHandlers(): void {
     const results: string[] = [];
 
     try {
-      // 1. Check resources path
-      results.push(`[INFO] Resources path: ${process.resourcesPath}`);
-
-      // 2. Check whisper directory
-      const whisperDir = join(process.resourcesPath, 'whisper');
-      results.push(`[INFO] Whisper dir: ${whisperDir}`);
-      results.push(`[INFO] Whisper dir exists: ${existsSync(whisperDir)}`);
-
-      if (existsSync(whisperDir)) {
-        const files = readdirSync(whisperDir);
-        results.push(`[INFO] Whisper dir contents: ${files.join(', ')}`);
-      }
-
-      // 3. Check whisper binaries
-      const binaryPath = join(whisperDir, 'whisper-cli.exe');
-      const serverPath = join(whisperDir, 'whisper-server.exe');
-      results.push(`[INFO] CLI binary: ${existsSync(binaryPath)}`);
-      results.push(`[INFO] Server binary: ${existsSync(serverPath)}`);
-      if (existsSync(serverPath)) {
-        results.push(`[OK] whisper-server.exe found (fast mode available)`);
-      }
-
-      // 4. Check model
+      // 1. Check transcription
       const settings = getSetting('transcription');
-      results.push(`[INFO] Transcription mode: ${settings.mode}`);
-      results.push(`[INFO] Model: ${settings.localModel}`);
+      results.push(`[INFO] Transcription: Groq Cloud`);
+      results.push(settings.groqApiKey
+        ? `[OK] Groq API key is configured`
+        : `[ERROR] Groq API key is NOT configured — set it in Settings > Whisper`);
 
-      const modelPath = join(whisperDir, `ggml-${settings.localModel}.bin`);
-      results.push(`[INFO] Model path: ${modelPath}`);
-      results.push(`[INFO] Model exists: ${existsSync(modelPath)}`);
-
-      // 5. Check hotkey
+      // 2. Check hotkey
       const hotkey = getSetting('hotkey');
       const activeHotkey = getCurrentHotkey();
       const activeMode = getCurrentMode();
@@ -137,42 +78,7 @@ export function registerIpcHandlers(): void {
       results.push(`[INFO] Hotkey mode: ${activeMode}`);
       results.push(`[OK] Using uiohook-napi (supports Win key + hold-to-record)`);
 
-      // 6. Try running whisper-cli.exe --help
-      if (existsSync(binaryPath)) {
-        try {
-          const output = await new Promise<string>((resolve, reject) => {
-            execFile(binaryPath, ['--help'], {
-              timeout: 10000,
-              cwd: whisperDir,
-              env: { ...process.env, PATH: whisperDir + ';' + (process.env.PATH || '') },
-            }, (error, stdout, stderr) => {
-              if (error) {
-                reject(new Error(`Exit code ${error.code}: ${stderr || error.message}`));
-              } else {
-                resolve(stdout || stderr);
-              }
-            });
-          });
-          results.push(`[OK] whisper-cli.exe runs: ${output.substring(0, 200)}...`);
-        } catch (err) {
-          results.push(`[ERROR] whisper-cli.exe failed: ${(err as Error).message}`);
-        }
-      }
-
-      // 7. Check ffmpeg
-      try {
-        await new Promise<void>((resolve, reject) => {
-          execFile('ffmpeg', ['-version'], { timeout: 5000 }, (error, stdout) => {
-            if (error) reject(error);
-            else resolve();
-          });
-        });
-        results.push(`[OK] ffmpeg is installed`);
-      } catch {
-        results.push(`[WARN] ffmpeg NOT installed (not needed for new audio pipeline)`);
-      }
-
-      // 8. Platform info
+      // 3. Platform info
       results.push(`[INFO] Platform: ${process.platform}`);
       results.push(`[INFO] Arch: ${process.arch}`);
       results.push(`[INFO] Electron: ${process.versions.electron}`);

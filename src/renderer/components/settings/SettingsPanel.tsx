@@ -177,11 +177,7 @@ export default function SettingsPanel() {
 
         {activeTab === 'whisper' && (
           <WhisperConfig
-            mode={settings.transcription.mode}
             groqApiKey={settings.transcription.groqApiKey || ''}
-            onModeChange={(mode) =>
-              handleUpdateSetting('transcription', { ...settings.transcription, mode })
-            }
             onGroqKeyChange={(key) =>
               handleUpdateSetting('transcription', { ...settings.transcription, groqApiKey: key })
             }

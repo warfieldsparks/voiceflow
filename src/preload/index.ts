@@ -49,15 +49,6 @@ const api = {
   setSetting: (key: string, value: any) => ipcRenderer.invoke(IPC.SETTINGS_SET, key, value),
   resetSettings: () => ipcRenderer.invoke(IPC.SETTINGS_RESET),
 
-  // ── Models ──
-  listModels: () => ipcRenderer.invoke(IPC.MODEL_LIST),
-  downloadModel: (name: string) => ipcRenderer.invoke(IPC.MODEL_DOWNLOAD, name),
-  onModelProgress: (callback: (data: { modelName: string; percent: number }) => void) => {
-    const handler = (_event: any, data: any) => callback(data);
-    ipcRenderer.on(IPC.MODEL_DOWNLOAD_PROGRESS, handler);
-    return () => ipcRenderer.removeListener(IPC.MODEL_DOWNLOAD_PROGRESS, handler);
-  },
-
   // ── Recording state (pull) ──
   getRecordingState: () => ipcRenderer.invoke(IPC.RECORDING_GET_STATE),
 

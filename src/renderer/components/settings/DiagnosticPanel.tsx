@@ -126,7 +126,7 @@ export default function DiagnosticPanel() {
       <div className="diagnostic-log">
         {logs.length === 0 ? (
           <div className="diagnostic-empty">
-            Click "Check System" to verify whisper engine, model, and hotkey.
+            Click "Check System" to verify API key and hotkey.
             <br />
             Click "Test Mic + Transcribe" to record 3 seconds and test the full pipeline.
           </div>

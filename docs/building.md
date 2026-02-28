@@ -30,15 +30,15 @@ dist/
 ```
 
 ## Package Output
-`release/VoiceFlow Setup 1.0.0.exe` (~870 MB)
+`release/VoiceFlow Setup 1.0.0.exe` (~80 MB)
 - NSIS installer (one-click, per-user)
-- Includes whisper.cpp binaries and small.en model (466MB) in extraResources
 - `uiohook-napi` native binaries unpacked from asar
+- Image processing libs from @nut-tree-fork excluded (unused — only keyboard features are used)
 
 ## electron-builder.yml Key Settings
 - `asar: true` — pack app into asar archive
-- `asarUnpack`: `resources/whisper/**/*` and `node_modules/uiohook-napi/**/*`
-- `extraResources`: copies `resources/whisper/` to `<app>/resources/whisper/`
+- `asarUnpack`: `node_modules/uiohook-napi/**/*`
+- Excludes `@jimp`, `pixelmatch`, `pngjs`, and other image libs from nut-tree-fork
 - `win.target: nsis` — Windows NSIS installer
 - `nsis.oneClick: true`, `nsis.perMachine: false`
 
@@ -95,12 +95,9 @@ Chromium throttles IPC to hidden windows. Mitigations: `backgroundThrottling: fa
 ### ScriptProcessorNode deprecation
 Deprecated in favor of AudioWorkletNode but works reliably in Electron. Future improvement.
 
-### Large package size (~870MB)
-Bundled whisper model is 466MB. Options: use tiny.en (75MB), download on first launch, or offer selection during install.
-
 ## Changelog (v1.0.0)
-- Removed GPU acceleration (Vulkan) and OpenAI cloud provider
+- Groq-only transcription (removed local whisper, @xenova/transformers, onnxruntime)
 - Default hotkey: `Alt+Z`, default mode: `hold` (hold-to-talk)
+- Excluded unused image processing libs from nut-tree-fork (~80MB installer vs ~900MB)
 - Settings migration for old installs
 - Belt-and-suspenders overlay state sync
-- Removed `openai`, `adm-zip` dependencies

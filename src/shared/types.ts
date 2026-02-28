@@ -1,6 +1,6 @@
 // ── Transcription ──
 
-export type TranscriptionMode = 'local' | 'groq';
+export type TranscriptionMode = 'groq';
 
 export interface TranscriptionResult {
   text: string;
@@ -47,7 +47,6 @@ export interface VoiceFlowSettings {
   transcription: {
     mode: TranscriptionMode;
     groqApiKey: string;
-    localModel: string;
   };
   commands: {
     detectionMode: CommandDetectionMode;
@@ -88,11 +87,3 @@ export interface AppStatus {
   lastError?: string;
 }
 
-// ── Models ──
-
-export interface WhisperModel {
-  name: string;
-  size: string;
-  downloaded: boolean;
-  path?: string;
-}

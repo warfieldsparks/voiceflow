@@ -15,9 +15,8 @@ export const settingsSchema = {
     type: 'object' as const,
     default: DEFAULT_SETTINGS.transcription,
     properties: {
-      mode: { type: 'string', enum: ['local', 'groq'] },
+      mode: { type: 'string', enum: ['groq'] },
       groqApiKey: { type: 'string' },
-      localModel: { type: 'string' },
     },
   },
   commands: {
