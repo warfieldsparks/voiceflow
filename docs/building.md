@@ -30,17 +30,22 @@ dist/
 ```
 
 ## Package Output
-`release/VoiceFlow Setup 1.0.0.exe` (~80 MB)
+`release/VoiceFlow Setup 1.0.0.exe` (~83 MB)
 - NSIS installer (one-click, per-user)
 - `uiohook-napi` native binaries unpacked from asar
-- Image processing libs from @nut-tree-fork excluded (unused — only keyboard features are used)
+- Non-Windows native binaries (darwin, linux) excluded
 
 ## electron-builder.yml Key Settings
 - `asar: true` — pack app into asar archive
 - `asarUnpack`: `node_modules/uiohook-napi/**/*`
-- Excludes `@jimp`, `pixelmatch`, `pngjs`, and other image libs from nut-tree-fork
+- Excludes non-win32 native binaries from nut-tree-fork and uiohook-napi
 - `win.target: nsis` — Windows NSIS installer
 - `nsis.oneClick: true`, `nsis.perMachine: false`
+
+## DO NOT
+- **Do NOT exclude `@jimp` or image processing libs** from electron-builder. `@nut-tree-fork/nut-js` requires them to load even though we only use keyboard features. Excluding them silently breaks text injection.
+- **Do NOT add `clearInvalidConfig: true`** or strict schema validation to SettingsStore. It runs before migration and wipes the user's API key when old fields don't match the new schema.
+- **Do NOT put build artifacts (.exe, .zip) in `dist/renderer/` or `src/renderer/public/`**. Vite copies public/ into dist/renderer/, and electron-builder packs dist/ into the asar. Stale artifacts bloat the installer by 300MB+.
 
 ## Dependencies
 | Package | Purpose |
@@ -98,6 +103,6 @@ Deprecated in favor of AudioWorkletNode but works reliably in Electron. Future i
 ## Changelog (v1.0.0)
 - Groq-only transcription (removed local whisper, @xenova/transformers, onnxruntime)
 - Default hotkey: `Alt+Z`, default mode: `hold` (hold-to-talk)
-- Excluded unused image processing libs from nut-tree-fork (~80MB installer vs ~900MB)
+- Excluded non-win32 native binaries (~83MB installer vs ~900MB)
 - Settings migration for old installs
 - Belt-and-suspenders overlay state sync

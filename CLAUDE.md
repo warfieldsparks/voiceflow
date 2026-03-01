@@ -2,6 +2,15 @@
 
 Desktop voice dictation with verbal commands. Electron + TypeScript + React. Hold hotkey, speak, text appears in active window.
 
+## WORKING BUILD — DO NOT BREAK
+
+This version (v1.0.0, ~83MB installer) is confirmed working end-to-end on Windows.
+Critical things that MUST stay intact:
+- **`build:preload` in the build script** — without it, `window.voiceflow` is undefined and the app is dead
+- **`@jimp` and image libs from `@nut-tree-fork`** — nut-js requires them to load, even though only keyboard features are used. Do NOT exclude them from electron-builder.
+- **No `clearInvalidConfig` or strict schema validation** in SettingsStore — it wipes the user's API key on upgrade when old fields (like `localModel`) don't match the new schema
+- **`dist/renderer/` must be clean** — no stale .exe/.zip artifacts, they get packed into the asar and bloat the installer by 300MB+
+
 ## Quick Start
 
 ```bash
@@ -88,7 +97,7 @@ Preload exposes 23 methods on `window.voiceflow`. All `on*` methods return clean
 
 ## Settings
 
-`electron-store` in `%APPDATA%/voiceflow/`. Schema validated. Migration on startup removes stale GPU/cloud fields from old installs. Changes to hotkey/mode/transcription trigger reactive side effects.
+`electron-store` in `%APPDATA%/voiceflow/`. No schema validation (removed — it wiped API keys on upgrade). Migration on startup removes stale fields (localModel, useGpu, cloud mode). Changes to hotkey/mode trigger reactive side effects.
 
 ## Window Management
 

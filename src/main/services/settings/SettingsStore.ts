@@ -13,8 +13,6 @@ export function initSettingsStore(): Store<VoiceFlowSettings> {
     store = new Store<VoiceFlowSettings>({
       name: 'voiceflow-settings',
       defaults: DEFAULT_SETTINGS as VoiceFlowSettings,
-      schema: settingsSchema as any,
-      clearInvalidConfig: true,
     });
 
     // Migrate v1 settings: remove stale GPU/cloud fields, apply new defaults

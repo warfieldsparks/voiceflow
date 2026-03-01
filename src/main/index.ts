@@ -206,6 +206,7 @@ ipcMain.on(IPC.AUDIO_DATA, async (_event, audioBuffer: ArrayBuffer, _format: str
     if (cancelled) return;
     log.error('Pipeline error', err);
     broadcastToRenderers(IPC.TRANSCRIPTION_ERROR, (err as Error).message);
+    hideOverlay();
   } finally {
     if (!cancelled) {
       setRecordingState('idle');

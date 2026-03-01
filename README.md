@@ -79,11 +79,11 @@ Two recording modes: **Hold** (default — hold to record, release to stop) and 
 
 Tray icon → Settings, or auto-opens on first launch.
 
-- **Diagnostic** — system info, whisper binary checks, test transcription
+- **Diagnostic** — system info, API key check, test transcription
 - **General** — startup behavior, overlay position, typing speed
 - **Hotkeys** — 5 presets (including Ctrl+Win), toggle vs hold mode
 - **Commands** — contextual vs prefix detection, custom commands
-- **Whisper** — Groq cloud / local engine selection, API key config
+- **Whisper** — Groq API key config
 - **Audio** — microphone selection, silence threshold, auto-stop timer
 
 ## Tech Stack
