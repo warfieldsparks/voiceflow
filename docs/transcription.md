@@ -1,30 +1,110 @@
-# Transcription System
+# Transcription
 
-## Two Providers
+VoiceFlow is currently a Groq-only transcription app.
 
-| Provider | Mode | API | Model | Speed | Cost |
-|----------|------|-----|-------|-------|------|
-| **Groq** (default) | `'groq'` | `api.groq.com` | whisper-large-v3-turbo | ~0.5s | Free (2000 req/day) |
-| **Local** | `'local'` | `127.0.0.1:18080` or CLI | small.en (466MB) | 2-5s CPU | Free, private |
+There is no active local Whisper runtime in the current codebase.
 
-## Groq Provider Details
-- Uses raw `https.request()` — no external HTTP library needed
-- Multipart form-data: file + model + language + temperature + response_format
-- Returns `{ text: "..." }` JSON
-- 30 second timeout
-- Requires API key from `console.groq.com/keys`
+## Provider
 
-## Local Provider Details
-- **Preferred**: Persistent whisper-server on port 18080
-  - Kept running between transcriptions (model stays in memory)
-  - Started on first use, health-checked each time
-  - Auto-restarts if model changes
-  - Multipart POST to `/inference` endpoint
-  - Uses half of CPU cores
-- **Fallback**: whisper-cli subprocess
-  - Used when whisper-server binary not found
-  - Loads model from disk each time (slower)
-  - Writes temp WAV, reads `.txt` output
+Provider implementation:
+
+- `src/main/services/transcription/TranscriptionService.ts`
+- `src/main/services/transcription/GroqProvider.ts`
+
+Type:
+
+```ts
+type TranscriptionMode = 'groq'
+```
+
+## Request Flow
+
+The main process sends recorded audio to:
+
+```text
+https://api.groq.com/openai/v1/audio/transcriptions
+```
+
+Request characteristics:
+
+- multipart form-data
+- file field with WAV payload
+- model: `whisper-large-v3-turbo`
+- language: `en`
+- temperature: `0`
+- response format: `json`
 
 ## Audio Format
-All audio is captured as **16kHz, mono, 16-bit PCM WAV**. This is the native format whisper.cpp expects — no conversion needed.
+
+The overlay records:
+
+- mono
+- 16 kHz
+- 16-bit PCM WAV
+
+That keeps the path simple and makes diagnostics easy to reason about.
+
+## Readiness Rules
+
+Transcription is considered ready when a Groq API key is present in settings.
+
+If the key is missing:
+
+- diagnostics report it
+- transcription calls fail fast with a clear error
+
+## Timeouts And Aborts
+
+There are several relevant timeout layers.
+
+### Provider-level request timeout
+
+The raw HTTPS request has:
+
+- socket timeout
+- hard deadline of `30s`
+- external abort support through `AbortSignal`
+
+### Pipeline-level timeout
+
+The main process also wraps transcription in its own timeout guard before command execution continues.
+
+## Error Handling
+
+Groq errors are normalized into readable messages where possible.
+
+Examples:
+
+- missing API key
+- HTTP error from Groq
+- request timeout
+- aborted request
+- malformed response
+
+The provider logs both the request lifecycle and API failures to the persistent log file.
+
+## Diagnostics Support
+
+The diagnostics screen has two relevant paths:
+
+- `Check System`: verifies the API key is configured
+- `Test Mic + Transcribe`: records a short local sample, builds a WAV, and runs the same transcription path used by the real app
+
+That second path is especially useful because it validates:
+
+- microphone permissions
+- audio capture
+- WAV construction
+- IPC transport
+- Groq transcription
+
+## Why This Is Groq-Only
+
+The repo previously had more transcription complexity, but the current runtime intentionally stays narrow:
+
+- simpler configuration
+- fewer bundled binaries
+- fewer moving parts during startup
+- lower maintenance burden
+
+If local transcription returns in the future, the docs in this file should be updated only after the runtime path exists again.

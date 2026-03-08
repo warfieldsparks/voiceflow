@@ -1,46 +1,184 @@
-# Command System
+# Commands
+
+VoiceFlow supports both built-in spoken commands and user-defined custom commands.
 
 ## Detection Modes
 
-### Contextual (default)
-- Natural speech: "hello world period new paragraph" → "hello world.\n\n"
-- Heuristic scoring distinguishes commands from regular text
-- "enter" alone → Enter key (high score), "please enter the room" → text (low score)
-- Adjacent commands reinforce each other (cluster boost)
+### Contextual
+
+This is the default mode.
+
+The parser tries to decide whether a phrase should be treated as:
+
+- literal text
+- a keyboard/navigation/editing command
+- punctuation
+- a formatting modifier
+
+Examples:
+
+- `hello world period` -> `hello world.`
+- `select all` -> `Ctrl+A`
+- `please enter the room` -> text, not the Enter key
 
 ### Prefix
-- Explicit trigger: "command enter" → Enter key, "enter" → text "enter"
-- Configurable prefix word (default: "command")
-- Literal escape: "literal period" → text "period" (not ".")
 
-## Scoring Heuristics (Contextual Mode)
-- Position weight: commands at start/end of utterance score higher
-- Isolation: standalone words score higher than embedded ones
-- Grammar context: preceding articles/prepositions lower the score
-- Category weight: keyboard commands score higher in ambiguous contexts
-- Cluster boost: adjacent commands reinforce each other
+This mode only fires commands when they are explicitly prefixed.
 
-## Built-in Commands (~60)
-- **Keyboard**: enter, tab, backspace, delete, escape, space
-- **Navigation**: up, down, left, right, home, end, page up, page down
-- **Editing**: undo, redo, cut, copy, paste, select all
-- **Punctuation** (~34): period, comma, question mark, exclamation point, colon, semicolon, open/close paren, open/close bracket, open/close brace, open/close quote, single quote, dash, hyphen, ellipsis, ampersand, at sign, hash, dollar sign, percent, plus, equals, underscore, pipe, tilde, caret, forward slash, backslash, asterisk
-- **Formatting**: new line, new paragraph, capitalize, all caps, no caps
+Default prefix:
 
-## Keyboard Injection
+```text
+command
+```
 
-### Text Injection (TextInjector.ts)
-**Instant mode** (speed=0, default):
-1. Save current clipboard contents
-2. Write text to clipboard
-3. Wait 30ms
-4. Press Ctrl+V
-5. Wait 100ms
-6. Restore original clipboard
+Examples:
 
-**Character mode** (speed>0): nut-js `keyboard.type()` with delay between chars (50/100/200 chars/sec)
+- `command enter` -> Enter key
+- `enter` -> literal word `enter`
 
-### Key Pressing (ActionExecutor.ts)
-- Single key: `keyboard.pressKey()` → `keyboard.releaseKey()`
-- Combo: Press all keys in order → release in reverse order
-- Uses `@nut-tree-fork/nut-js` for cross-platform keyboard simulation
+## Literal Escape
+
+The literal escape word is separate from detection mode.
+
+Default escape word:
+
+```text
+literal
+```
+
+Examples:
+
+- `literal period` -> types `period`
+- `literal enter` -> types `enter`
+
+## Built-In Command Inventory
+
+VoiceFlow currently ships 61 built-in commands:
+
+| Category | Count | Examples |
+| --- | ---: | --- |
+| keyboard | 6 | `enter`, `tab`, `backspace` |
+| navigation | 8 | `arrow up`, `home`, `page down` |
+| editing | 6 | `copy`, `paste`, `undo`, `redo` |
+| punctuation | 36 | `period`, `question mark`, `open paren`, `ampersand` |
+| formatting | 5 | `new line`, `new paragraph`, `capitalize` |
+
+## Representative Built-In Commands
+
+### Keyboard
+
+- `enter`
+- `tab`
+- `backspace`
+- `delete`
+- `escape`
+- `space bar`
+
+### Navigation
+
+- `arrow up`
+- `arrow down`
+- `arrow left`
+- `arrow right`
+- `home`
+- `end`
+- `page up`
+- `page down`
+
+### Editing
+
+- `select all`
+- `copy`
+- `paste`
+- `cut`
+- `undo`
+- `redo`
+
+### Punctuation
+
+- `period`
+- `comma`
+- `question mark`
+- `exclamation point`
+- `open paren`
+- `close paren`
+- `open quote`
+- `single quote`
+- `dash`
+- `ellipsis`
+- `at sign`
+- `underscore`
+- `plus sign`
+- `less than`
+- `greater than`
+
+### Formatting
+
+- `new line`
+- `new paragraph`
+- `capitalize`
+- `all caps`
+- `no caps`
+
+## How Custom Commands Work
+
+The settings UI currently supports two custom command shapes:
+
+- type text
+- press a single key
+
+The underlying type system supports more action types, but the current settings editor intentionally exposes a smaller, simpler subset.
+
+## Good Custom Command Design
+
+Prefer phrases that are:
+
+- unlikely to appear in normal speech
+- short and unambiguous
+- consistent with the action they trigger
+
+Good:
+
+- `signature block`
+- `insert legal disclaimer`
+- `send escape`
+
+Risky:
+
+- `okay`
+- `right`
+- `please`
+
+## Injection Details
+
+### Text
+
+When typing speed is `0`, VoiceFlow pastes text through the clipboard:
+
+1. save clipboard
+2. write text
+3. send `Ctrl+V`
+4. restore clipboard
+
+When typing speed is greater than `0`, it types character-by-character through `nut-js`.
+
+### Keys And Combos
+
+Key actions are executed by `ActionExecutor` using `@nut-tree-fork/nut-js`.
+
+Combo behavior:
+
+- keys are pressed in order
+- keys are released in reverse order
+
+## Where To Change Commands In Code
+
+Built-in commands:
+
+- `src/shared/command-definitions.ts`
+
+Parsing behavior:
+
+- `src/main/services/commands/CommandParser.ts`
+- `src/main/services/commands/SmartDetection.ts`
+- `src/main/services/commands/CommandRegistry.ts`

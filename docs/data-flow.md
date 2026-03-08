@@ -1,76 +1,181 @@
-# Data Flow: Recording Pipeline
+# Data Flow
 
-## 1. Hotkey Press (Main Process)
+This document describes the end-to-end recording pipeline as it exists today.
 
-`globalHotkey.ts` → `uiohook-napi` detects key combo → calls `startRecording()` in `index.ts`
+## Session Model
 
+Every recording request gets a monotonically increasing `sessionId`.
+
+That `sessionId` is carried through:
+
+- `recording:start`
+- `recording:stop`
+- renderer microphone events
+- `audio:data`
+- abort and error paths
+
+This prevents stale renderer events from reviving an old recording or keeping the app stuck in `processing`.
+
+## Step 1: Hotkey Press
+
+The hotkey subsystem calls into `startRecording()` in `src/main/index.ts`.
+
+Main-process effects:
+
+- allocate a new `sessionId`
+- set state to `recording`
+- show the overlay
+- arm the microphone-start timeout
+- wait for the overlay window to be ready
+- send `recording:start` with the session payload
+
+## Step 2: Renderer Arms Microphone Capture
+
+`RecordingOverlay.tsx` receives `recording:start` and:
+
+1. requests microphone access
+2. creates an `AudioContext`
+3. creates a `ScriptProcessorNode`
+4. starts collecting PCM chunks
+5. reports `recording:captureStarted`
+
+If setup fails, the renderer sends:
+
+- `recording:captureFailed`
+
+If a stop arrives before capture is armed, the renderer reports:
+
+- `recording:noAudio`
+
+## Step 3: Stop Request
+
+Stopping can come from several paths:
+
+- hotkey release in hold mode
+- hotkey press in toggle mode
+- tray `Stop Recording`
+- overlay cancel button
+
+Main-process effects:
+
+- clear the capture-start timeout
+- move state to `processing`
+- arm the audio-delivery timeout
+- send `recording:stop` to the overlay
+
+## Step 4: Renderer Finalizes Audio
+
+The renderer:
+
+1. concatenates all PCM chunks
+2. writes a 44-byte WAV header
+3. converts float samples to 16-bit PCM
+4. sends `audio:data`
+
+If the captured audio is empty or invalid, the renderer reports `recording:noAudio` instead of sending useless payloads.
+
+## Step 5: Main Process Accepts Audio
+
+The main process rejects any audio that is:
+
+- from a stale `sessionId`
+- received while the state is not `processing`
+
+Accepted audio starts a new pipeline generation:
+
+- any previous abort controller is cancelled
+- a new abort controller is created
+- stale pipeline results are ignored
+
+## Step 6: Transcription
+
+`TranscriptionService.ts` creates a `GroqProvider` and sends the WAV data to:
+
+```text
+https://api.groq.com/openai/v1/audio/transcriptions
 ```
-startRecording() {
-  setRecordingState('recording')          // Updates tray + broadcasts IPC.RECORDING_STATE
-  showOverlay()                           // Shows overlay window
-  overlay.webContents.send(RECORDING_STATE, 'recording')   // Direct send to overlay
-  overlay.webContents.send(RECORDING_START)                 // Trigger audio capture
-}
-```
 
-## 2. Audio Capture (Renderer — RecordingOverlay.tsx)
+The provider enforces:
 
-On `RECORDING_START` IPC message:
-1. `navigator.mediaDevices.getUserMedia({ audio: { sampleRate: { ideal: 16000 } } })`
-2. Create `AudioContext({ sampleRate: 16000 })`
-3. Create `ScriptProcessorNode(4096, 1, 1)` — captures raw PCM Float32 samples
-4. Each `onaudioprocess` event: push `new Float32Array(data)` to `pcmChunksRef`
-5. Connect to `AnalyserNode` for waveform visualization
+- API-key presence
+- socket timeout
+- hard request deadline
+- external abort support
 
-## 3. Hotkey Release / Stop (Main Process)
+## Step 7: Command Parsing
 
-`globalHotkey.ts` detects key release → calls `stopRecording()` in `index.ts`
+If transcription text is non-empty:
 
-```
-stopRecording() {
-  setRecordingState('processing')         // Updates tray + broadcasts
-  broadcastToRenderers(RECORDING_STOP)    // Tell renderer to finalize audio
-}
-```
+1. `CommandParser` tokenizes and scores candidate commands
+2. it returns parsed segments
+3. the main process broadcasts the raw transcript to the renderer
 
-## 4. WAV Encoding (Renderer — RecordingOverlay.tsx)
+The overlay is then hidden before any typing starts.
 
-On `RECORDING_STOP` IPC message:
-1. Concatenate all `pcmChunksRef` Float32Array chunks
-2. `buildWav()` — writes 44-byte WAV header + converts Float32 → Int16 PCM
-3. `window.voiceflow.sendAudioData(wavBuffer, 'wav')` → IPC to main process
-4. Cleanup: disconnect processor, close AudioContext, stop MediaStream tracks
+## Step 8: Action Execution
 
-## 5. Transcription (Main Process — index.ts → TranscriptionService.ts)
+`ActionExecutor.execute(parsed)` runs with its own timeout.
 
-On `IPC.AUDIO_DATA`:
-1. `transcribe(audioBuffer, 'wav')` — factory creates provider based on settings
-2. **Groq**: HTTP POST multipart form to `api.groq.com` (whisper-large-v3-turbo)
-3. **Local**: POST to `http://127.0.0.1:18080/inference` (persistent whisper-server)
-4. Returns `{ text: string, duration: number }`
+Segment handling:
 
-## 6. Command Parsing (Main Process — CommandParser.ts)
+- text segments -> `TextInjector`
+- key segments -> single key press
+- combo segments -> key combo
+- modifier segments -> formatting state applied to the next text segment
 
-`commandParser.parse(result.text)` returns `ParseResult`:
-- Tokenizes text into words
-- **Contextual mode**: Finds command phrases via trie, scores each with heuristics (position, isolation, grammar context), applies cluster boosting, accepts if score >= 0.5
-- **Prefix mode**: Only triggers commands prefixed with "command" keyword
-- Output: array of `{ type: 'text' | 'command', value, command? }` segments
+## Step 9: Completion
 
-## 7. Execution (Main Process — ActionExecutor.ts)
+On success:
 
-1. `hideOverlay()` — so keystrokes go to the right window
-2. 150ms delay — let focus return to previous window
-3. For each segment:
-   - **Text**: `TextInjector.type()` → clipboard paste (save → write → Ctrl+V → restore) via nut-js
-   - **Command key**: `keyboard.pressKey()` / `keyboard.releaseKey()` via nut-js
-   - **Command combo**: Press all keys, release in reverse order
-   - **Modifier**: Store pending modifier (capitalize/allCaps/noCaps), apply to next text segment
+- command execution results are broadcast
+- `activeSessionId` is cleared
+- state returns to `idle`
 
-## 8. Completion (Main Process)
+On failure:
 
-```
-broadcastToRenderers(TRANSCRIPTION_RESULT, text)    // Show in overlay
-broadcastToRenderers(COMMAND_EXECUTED, segments)     // Notify UI
-setRecordingState('idle')                            // Back to ready
-```
+- the error is broadcast through `transcription:error`
+- the overlay is hidden
+- the session is reset back to `idle`
+
+## Force-Reset Paths
+
+The pipeline can be force-reset from:
+
+- processing watchdog timeout
+- capture start timeout
+- audio delivery timeout
+- renderer-side cancel
+- tray abort
+- hotkey cancel while already processing
+- app shutdown
+
+`forceResetPipeline()`:
+
+- aborts active work
+- clears timers
+- notifies the renderer with `recording:abort`
+- clears `activeSessionId`
+- hides the overlay
+- returns to `idle`
+
+## Timers
+
+Current timeout values:
+
+- microphone start timeout: `15,000 ms`
+- audio delivery timeout: `8,000 ms`
+- transcription timeout: `30,000 ms`
+- action execution timeout: `10,000 ms`
+- processing watchdog: `45,000 ms`
+
+## Why The Session Logic Matters
+
+Without the session and timeout layers, a dictation app tends to fail in exactly the ways users hate:
+
+- transcribing forever
+- recording forever
+- double-starting
+- typing stale transcripts into the wrong app
+- becoming recoverable only by killing the process
+
+The current pipeline is designed specifically to prevent those classes of failure.

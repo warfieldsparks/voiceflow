@@ -1,108 +1,150 @@
-# Build & Package
+# Building
+
+This document covers local development builds, Windows packaging, and the native helper used for `Ctrl+Win`.
+
+## Prerequisites
+
+Required:
+
+- Node.js 18+
+- npm
+
+Recommended:
+
+- Windows for runtime testing
+- Wine if packaging Windows installers from Linux
+- `x86_64-w64-mingw32-gcc` on Linux if you need to rebuild the `Ctrl+Win` helper
 
 ## Scripts
+
 ```bash
-npm install                      # Install dependencies
-npm run build                    # Build renderer (Vite) + main/preload (tsc)
-npm run dev                      # Dev mode with hot reload
-npm test                         # Run unit tests (vitest)
-npm run package                  # Build + package with electron-builder
-npx electron-builder --win       # Package Windows installer only
+npm install
+npm run dev
+npm test
+npm run build
+npm run package
 ```
 
-## Build Steps
-`npm run build` runs three steps in sequence:
-1. `build:renderer` — Vite builds the React UI → `dist/renderer/`
-2. `build:main` — TypeScript compiles main process → `dist/main/main/`
-3. `build:preload` — TypeScript compiles preload script → `dist/main/preload/`
+Current script meanings:
 
-**All three are required.** The preload script exposes `window.voiceflow` to the renderer via `contextBridge`. Without it, the overlay cannot communicate with the main process.
+- `npm run dev`: Vite renderer dev server plus Electron main process
+- `npm run build:native`: rebuilds the native `Ctrl+Win` helper when needed
+- `npm run build`: native helper + renderer + main + preload
+- `npm run package`: full build plus `electron-builder`
 
 ## Build Output
-```
+
+`npm run build` produces:
+
+```text
 dist/
-├── main/                        # Compiled main process (CommonJS)
-│   ├── main/index.js
-│   └── preload/index.js
-└── renderer/                    # Vite-built renderer (ES modules)
-    ├── index.html
-    └── assets/
+  main/
+    main/
+    preload/
+  renderer/
 ```
 
-## Package Output
-`release/VoiceFlow Setup 1.0.0.exe` (~83 MB)
-- NSIS installer (one-click, per-user)
-- `uiohook-napi` native binaries unpacked from asar
-- Non-Windows native binaries (darwin, linux) excluded
+It also ensures the Windows helper binary exists at:
 
-## electron-builder.yml Key Settings
-- `asar: true` — pack app into asar archive
-- `asarUnpack`: `node_modules/uiohook-napi/**/*`
-- Excludes non-win32 native binaries from nut-tree-fork and uiohook-napi
-- `win.target: nsis` — Windows NSIS installer
-- `nsis.oneClick: true`, `nsis.perMachine: false`
-
-## DO NOT
-- **Do NOT exclude `@jimp` or image processing libs** from electron-builder. `@nut-tree-fork/nut-js` requires them to load even though we only use keyboard features. Excluding them silently breaks text injection.
-- **Do NOT add `clearInvalidConfig: true`** or strict schema validation to SettingsStore. It runs before migration and wipes the user's API key when old fields don't match the new schema.
-- **Do NOT put build artifacts (.exe, .zip) in `dist/renderer/` or `src/renderer/public/`**. Vite copies public/ into dist/renderer/, and electron-builder packs dist/ into the asar. Stale artifacts bloat the installer by 300MB+.
-
-## Dependencies
-| Package | Purpose |
-|---------|---------|
-| `@nut-tree-fork/nut-js` | Cross-platform keyboard simulation |
-| `electron-store` | Persistent settings storage |
-| `uiohook-napi` | OS-level keyboard hooks |
-| `electron` | Desktop app framework |
-| `react` / `react-dom` | UI framework |
-| `vite` | Renderer bundler |
-| `vitest` | Unit test runner |
-| `typescript` | Type safety |
-| `electron-builder` | Packaging |
-
-## Common Tasks
-
-### Adding a new IPC channel
-1. Add channel name to `src/shared/constants.ts` → `IPC` object
-2. Add handler in `src/main/ipc-handlers.ts`
-3. Expose in `src/preload/index.ts`
-4. Call from renderer via `window.voiceflow.methodName()`
-
-### Adding a new transcription provider
-1. Create `src/main/services/transcription/NewProvider.ts` implementing `TranscriptionProvider`
-2. Add mode to `TranscriptionMode` in `src/shared/types.ts`
-3. Add branch to factory in `TranscriptionService.ts`
-4. Add to schema (`SettingsSchema.ts`) and defaults (`constants.ts`)
-5. Update `WhisperConfig.tsx` UI
-
-### Adding a new verbal command
-Add to `src/shared/command-definitions.ts`:
-```typescript
-{ phrase: 'my phrase', action: { type: 'key', key: 'Enter' }, category: 'keyboard', description: 'Presses Enter' }
+```text
+resources/bin/win32/voiceflow-ctrl-win-helper.exe
 ```
 
-### Adding a hotkey preset
-1. Add to `PRESETS` map in `src/main/globalHotkey.ts` with uiohook key codes
-2. Add to `HOTKEY_PRESETS` array in `HotkeyConfig.tsx`
+## Native `Ctrl+Win` Helper
 
-### Adding a settings field
-1. Add to `VoiceFlowSettings` in `src/shared/types.ts`
-2. Add to `DEFAULT_SETTINGS` in `constants.ts`
-3. Add to schema in `SettingsSchema.ts`
-4. Add migration in `SettingsStore.ts` if needed
-5. Add UI in the appropriate settings tab
+The helper exists because `Ctrl+Win` needs a real Windows-level interception path.
 
-## Known Issues
+Source:
 
-### Overlay shows "Ready" instead of "Recording"
-Chromium throttles IPC to hidden windows. Mitigations: `backgroundThrottling: false`, direct `webContents.send()`, pull-on-mount via `RECORDING_GET_STATE`.
+```text
+native/windows/ctrl_win_hotkey_helper.c
+```
 
-### ScriptProcessorNode deprecation
-Deprecated in favor of AudioWorkletNode but works reliably in Electron. Future improvement.
+Build script:
 
-## Changelog (v1.0.0)
-- Groq-only transcription (removed local whisper, @xenova/transformers, onnxruntime)
-- Default hotkey: `Alt+Z`, default mode: `hold` (hold-to-talk)
-- Excluded non-win32 native binaries (~83MB installer vs ~900MB)
-- Settings migration for old installs
-- Belt-and-suspenders overlay state sync
+```text
+scripts/build-ctrl-win-helper.mjs
+```
+
+Behavior:
+
+- Linux: prefers `x86_64-w64-mingw32-gcc`
+- Windows: prefers `gcc` or `clang`
+- skips rebuild if the binary is newer than the source
+- fails only when no compiler exists and no binary is already available
+
+## Packaging Windows Installers
+
+Standard packaging:
+
+```bash
+npm run package
+```
+
+Explicit Windows-only packaging:
+
+```bash
+npx electron-builder --win
+```
+
+Cross-building unsigned Windows installers from Linux:
+
+```bash
+CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --win nsis -c.win.signAndEditExecutable=false
+```
+
+That is the recipe used for the current public release.
+
+## Packaging Notes
+
+Important `electron-builder.yml` details:
+
+- `asar: true`
+- `asarUnpack: node_modules/uiohook-napi/**/*`
+- `extraResources: resources/bin -> bin`
+- non-Windows native binaries are excluded from packaging
+- target is NSIS
+
+## Release Artifact
+
+The main release artifact is:
+
+```text
+release/VoiceFlow Setup 1.0.0.exe
+```
+
+The unpacked Windows app is also produced under:
+
+```text
+release/win-unpacked/
+```
+
+## Known Build Constraints
+
+### Do Not Remove `@jimp`-related transitive dependencies
+
+`@nut-tree-fork/nut-js` still expects supporting image-processing dependencies to load correctly even though VoiceFlow mainly uses keyboard automation.
+
+### Do Not Reintroduce Strict Config Auto-Clearing
+
+The old approach cleared user settings too aggressively and could wipe the stored API key. Keep the current defaults-plus-migration approach unless you are prepared to write a safe migration layer first.
+
+### Do Not Drop `extraResources` For `resources/bin`
+
+If the native helper is not packaged, `Ctrl+Win` will fall back to lower-level suppression logic and Windows Start-menu behavior may regress.
+
+### Do Not Remove `uiohook-napi` From `asarUnpack`
+
+The native module must remain unpacked to load correctly in packaged builds.
+
+## Build Verification Checklist
+
+Before pushing a release:
+
+1. `npm test`
+2. `npm run build`
+3. package the NSIS installer
+4. confirm `release/win-unpacked/resources/bin/win32/voiceflow-ctrl-win-helper.exe` exists
+5. verify the installer size is realistic, not a stub
+6. verify the app launches on Windows
+7. test `Alt+Z`, `Ctrl+Win`, logging, and `Turn Off VoiceFlow`

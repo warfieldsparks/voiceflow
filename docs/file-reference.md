@@ -1,196 +1,224 @@
 # File Reference
 
-## Main Process
-
-### `src/main/index.ts` — App Lifecycle & Recording Flow
-
-**Purpose**: Entry point. Manages the recording state machine, app lifecycle, and single-instance lock.
-
-**Key state**:
-- `recordingState: RecordingState` — `'idle'` | `'recording'` | `'processing'`
-- `commandParser: CommandParser` — initialized with settings on `app.ready`
-- `actionExecutor: ActionExecutor` — initialized with typing speed on `app.ready`
-- `cancelled: boolean` — tracks if user cancelled transcription
-
-**App lifecycle**:
-- `app.requestSingleInstanceLock()` — prevents multiple instances
-- `second-instance` → shows settings window
-- `app.ready` → init settings → init services → create overlay → create tray → register hotkey
-- `app.will-quit` → unregister hotkeys → destroy tray → destroy windows → shutdown whisper-server
-- `window-all-closed` → does nothing (app stays in tray)
-
-**Recording flow**:
-- `toggleRecording()` — called by hotkey in toggle mode
-- `startRecording()` — sets state to `'recording'`, shows overlay, sends direct IPC to overlay
-- `stopRecording()` — sets state to `'processing'`, broadcasts `RECORDING_STOP`
-- `IPC.AUDIO_DATA` handler — transcribes → parses commands → hides overlay → executes actions
+This is a practical map of the files you will actually touch when debugging or extending VoiceFlow.
 
-**State sync** (belt-and-suspenders approach for overlay):
-1. `broadcastToRenderers(RECORDING_STATE)` — broadcasts to all windows
-2. Direct `overlay.webContents.send(RECORDING_STATE)` — targeted send to overlay
-3. Direct `overlay.webContents.send(RECORDING_START)` — trigger audio capture
-4. `RECORDING_GET_STATE` handler — renderer can pull state on mount
+## Core Runtime
 
-### `src/main/globalHotkey.ts` — Global Keyboard Hooks
+### `src/main/index.ts`
 
-**Purpose**: Registers OS-level keyboard hooks using `uiohook-napi`. Supports Win/Meta key and hold-to-record mode.
+Main entry point.
 
-**Preset hotkeys** (in `PRESETS` map):
-| Preset ID | Key Codes |
-|-----------|-----------|
-| `Ctrl+Win` | Ctrl + Meta |
-| `Ctrl+Shift+Space` | Ctrl + Shift + Space |
-| `Ctrl+Alt+Space` | Ctrl + Alt + Space |
-| `Alt+Z` | Alt + Z |
-| `Ctrl+Shift+Z` | Ctrl + Shift + Z |
-| `F9` | F9 |
+Owns:
 
-**Modes**:
-- **Toggle**: `onKeyDown` fires callback when all required keys pressed simultaneously
-- **Hold**: `onKeyDown` fires `onStart` when all keys held, `onKeyUp` fires `onStop` when any key released
+- app startup
+- single-instance lock
+- session allocation
+- state transitions
+- timeout orchestration
+- transcription and execution pipeline
 
-**Exports**:
-- `registerHotkey(id, callback, options)` — returns `false` if preset not found
-- `unregisterHotkey()` — clears current registration
-- `updateHotkey(newId)` — re-registers with same callbacks
-- `updateHotkeyMode(mode)` — switch toggle/hold without re-registering
-- `unregisterAll()` — stops uiohook entirely
-- `getCurrentHotkey()` / `getCurrentMode()` — getters
-- `getHotkeyPresets()` — returns preset IDs
+If recording gets stuck, start here.
 
-### `src/main/ipc-handlers.ts` — IPC Handler Registration
+### `src/main/globalHotkey.ts`
 
-**Purpose**: Centralizes all `ipcMain.handle()` registrations. Called once from `app.ready`.
+Hotkey coordinator.
 
-**Handlers registered**:
-- `TRANSCRIBE` — direct transcription (used by diagnostics)
-- `SETTINGS_GET_ALL` / `SETTINGS_GET` / `SETTINGS_SET` / `SETTINGS_RESET`
-- `MODEL_LIST` / `MODEL_DOWNLOAD`
-- `APP_STATUS`
-- `DIAGNOSTIC_RUN` / `DIAGNOSTIC_TRANSCRIBE_TEST`
+Owns:
 
-**Side effects on `SETTINGS_SET`**:
-- `key === 'hotkey'` → calls `updateHotkey(value)` to re-register
-- `key === 'hotkeyMode'` → calls `updateHotkeyMode(value)`
-- `key === 'transcription'` with mode changed → calls `shutdownWhisperServer()` to restart
+- preset definitions
+- `globalShortcut` registration
+- `uiohook` fallback and hold-release behavior
+- native `Ctrl+Win` helper integration
 
-**Exports**:
-- `registerIpcHandlers()` — call once
-- `broadcastToRenderers(channel, ...args)` — sends to all `BrowserWindow` instances
+If a hotkey leaks characters or fires incorrectly, start here.
 
-### `src/main/tray.ts` — System Tray
+### `src/main/services/hotkeys/WindowsCtrlWinHelper.ts`
 
-**Purpose**: Creates and manages the system tray icon with context menu.
+Spawn wrapper for the native Windows helper.
 
-**Menu items**: Start/Stop Recording, Settings, Version info, Quit.
-**Tooltip** updates with recording state: Ready / Recording... / Processing...
-**Fallback icon**: If no icon file found, generates a 16x16 blue dot PNG programmatically.
+Owns:
 
-### `src/main/window-manager.ts` — Window Management
+- helper path resolution
+- helper lifecycle
+- `DOWN` / `UP` event handling
+- fallback when the helper exits unexpectedly
 
-**Purpose**: Creates and manages two BrowserWindow instances.
+### `native/windows/ctrl_win_hotkey_helper.c`
 
-**Overlay window** (420x64):
-- Frameless, transparent, always-on-top, skip-taskbar, non-focusable
-- `backgroundThrottling: false` — critical for receiving IPC while hidden
-- Centered horizontally, 20px from top
-- Loads renderer URL with `#overlay` hash
+Low-level Windows keyboard hook.
 
-**Settings window** (720x560):
-- Standard framed window with min size 600x400
-- Loads renderer URL with `#settings` hash
-- Created on demand (tray menu, second instance)
-- Menu bar hidden
+Owns:
 
-**Path resolution**:
-- Dev: `http://localhost:5173#overlay` / `#settings`
-- Packaged: `file://<appPath>/dist/renderer/index.html#overlay`
-- Preload: `<appPath>/dist/main/preload/index.js`
+- intercepting `Ctrl+Win`
+- swallowing the shell-triggering key path
+- emitting simple stdout events to Electron
 
-### `src/main/services/transcription/TranscriptionService.ts` — Transcription Factory
+### `scripts/build-ctrl-win-helper.mjs`
 
-**Providers**: `groq` → `GroqProvider(apiKey)`, `local` → `WhisperLocalProvider(modelName)`
-**Exports**: `transcribe(audioBuffer, format)`, `isTranscriptionReady()`
+Build script for the helper binary.
 
-### `src/main/services/transcription/GroqProvider.ts` — Groq Cloud Transcription
+Use this when the native helper source changes.
 
-**API**: `POST https://api.groq.com/openai/v1/audio/transcriptions`
-- Model: `whisper-large-v3-turbo`, Language: `en`, Temperature: `0`
-- Raw `https.request()` with multipart form-data (no external HTTP library)
-- 30s timeout, parses error JSON for user-friendly messages
+## IPC And Logging
 
-### `src/main/services/transcription/WhisperLocalProvider.ts` — Local Transcription
+### `src/preload/index.ts`
 
-**Server mode** (fast): Persistent `whisper-server` on port 18080. Model stays in memory. Health-checked before each use. Multipart POST to `/inference`.
+The only renderer-safe bridge into main-process behavior.
 
-**CLI mode** (fallback): Runs `whisper-cli` subprocess. Loads model each time. Writes temp WAV, reads `.txt` output.
+If you add a new IPC entry point, update this file.
 
-**Model resolution**: Bundled dir first (`resources/whisper/`), then user data dir. Falls back to `ggml-small.en.bin`.
+### `src/main/ipc-handlers.ts`
 
-**Server lifecycle**: Started on first call, auto-restarts on model change, shut down on `app.will-quit`.
+Centralized IPC registration.
 
-### `src/main/services/commands/CommandParser.ts` — Command Parsing
+Owns:
 
-**Contextual mode**: Trie lookup → heuristic scoring → cluster boost → accept if score >= 0.5
-**Prefix mode**: Only triggers commands prefixed with configurable word (default: "command")
-**Output**: `ParseResult { segments: ParsedSegment[], rawText: string }`
+- settings get/set/reset
+- diagnostics
+- direct transcription test path
+- quit and open-logs actions
+- renderer log ingestion
 
-### `src/main/services/commands/CommandRegistry.ts` — Trie-Based Lookup
+### `src/main/utils/logger.ts`
 
-`longestMatch(words, startIndex)` — returns longest matching command phrase.
+Persistent logging implementation.
 
-### `src/main/services/commands/SmartDetection.ts` — Heuristic Scoring
+Owns:
 
-Scoring factors: position weight, isolation, grammar context, category weight, cluster boost.
+- daily log files
+- boot buffering
+- rotation
+- crash logging
+- external log event ingestion
 
-### `src/main/services/keyboard/ActionExecutor.ts` — Action Execution
+## Windows And Tray
 
-Action types: `key` (single press), `combo` (multi-key), `text` (inject), `sequence` (multiple), `modifier` (capitalize/allCaps/noCaps for next text).
+### `src/main/tray.ts`
 
-### `src/main/services/keyboard/TextInjector.ts` — Text Injection
+Tray icon and menu construction.
 
-Speed 0: clipboard paste (save → write → Ctrl+V → restore). Speed > 0: char-by-char via nut-js.
+If the tray labels, tooltip, or abort/quit actions are wrong, update this file.
 
-### `src/main/services/keyboard/KeyMapper.ts` — Key Name Mapping
+### `src/main/window-manager.ts`
 
-Maps command names ("enter", "tab") to nut-js `Key` enum values.
+BrowserWindow creation.
 
-### `src/main/services/settings/SettingsStore.ts` — Settings Persistence
+Owns:
 
-electron-store wrapper. Migration on init removes stale GPU/cloud fields from old installs.
+- overlay window configuration
+- settings window configuration
+- overlay-ready synchronization
 
-### `src/main/services/settings/SettingsSchema.ts` — JSON Schema
+## Transcription
 
-Validation schema for electron-store. Ensures settings conform to expected types/enums.
+### `src/main/services/transcription/TranscriptionService.ts`
 
----
+Current transcription entry point.
 
-## Renderer Process
+This repo is Groq-only today.
 
-### `src/renderer/App.tsx` — Routing
+### `src/main/services/transcription/GroqProvider.ts`
 
-`#overlay` → `<RecordingOverlay />`, `#settings` → `<SettingsPanel />`, default → `<PreviewShell />`
+Low-level Groq multipart upload implementation with timeouts and abort handling.
 
-### `src/renderer/components/overlay/RecordingOverlay.tsx` — Recording Overlay
+If Groq failures are unclear or the request format changes, update this file.
 
-Main recording UI. States: idle (Ready), recording (waveform), processing (spinner + timer), error.
-Audio capture: getUserMedia → AudioContext(16kHz) → ScriptProcessorNode → PCM chunks → buildWav().
-State sync on mount: calls `getRecordingState()` to pull current state.
+## Commands And Typing
 
-### `src/renderer/components/overlay/Waveform.tsx` — SVG bar chart (32 bars)
+### `src/shared/command-definitions.ts`
 
-### `src/renderer/components/overlay/StatusIndicator.tsx` — Colored dot + label
+The built-in spoken command catalog.
 
-### `src/renderer/components/settings/SettingsPanel.tsx` — Tabbed settings UI
+### `src/main/services/commands/CommandParser.ts`
 
-Tabs: Diagnostic, General, Hotkeys, Commands, Whisper, Audio
+Parser entry point.
 
-### `src/renderer/components/settings/WhisperConfig.tsx` — Groq/Local selector + API key
+### `src/main/services/commands/CommandRegistry.ts`
 
-### `src/renderer/components/settings/HotkeyConfig.tsx` — Preset selector + toggle/hold mode
+Phrase lookup structure.
 
-### `src/renderer/hooks/useWaveform.ts` — AnalyserNode → 32 bars of frequency data
+### `src/main/services/commands/SmartDetection.ts`
 
-### `src/renderer/hooks/useSettings.ts` — Read/write settings via IPC
+Contextual scoring rules.
 
-### `src/renderer/hooks/useAudioRecorder.ts` — Standalone audio recording hook (diagnostics)
+### `src/main/services/keyboard/ActionExecutor.ts`
+
+High-level action runner for text, keys, combos, sequences, and modifiers.
+
+### `src/main/services/keyboard/TextInjector.ts`
+
+Text insertion implementation, including clipboard-preserving paste mode.
+
+## Settings
+
+### `src/shared/constants.ts`
+
+Source of truth for:
+
+- IPC channel names
+- default settings
+
+### `src/shared/types.ts`
+
+Shared runtime types used by main, preload, and renderer.
+
+### `src/main/services/settings/SettingsStore.ts`
+
+Settings persistence and migration logic.
+
+### `src/main/services/settings/SettingsSchema.ts`
+
+Current structured schema reference for settings shape and defaults.
+
+## Renderer UI
+
+### `src/renderer/components/overlay/RecordingOverlay.tsx`
+
+Most important renderer file.
+
+Owns:
+
+- microphone capture
+- WAV encoding
+- transcription result display
+- cancel/abort behavior
+- session tracking inside the renderer
+
+### `src/renderer/components/settings/SettingsPanel.tsx`
+
+Top-level settings screen and left sidebar, including `Turn Off VoiceFlow`.
+
+### `src/renderer/components/settings/HotkeyConfig.tsx`
+
+Visible hotkey preset list and mode selector.
+
+### `src/renderer/components/settings/DiagnosticPanel.tsx`
+
+Operational tools:
+
+- `Check System`
+- `Test Mic + Transcribe`
+- `Open Logs Folder`
+- `Quit VoiceFlow`
+
+### `src/renderer/components/settings/CommandEditor.tsx`
+
+Custom commands UI.
+
+### `src/renderer/components/settings/WhisperConfig.tsx`
+
+Groq API key screen.
+
+### `src/renderer/components/settings/AudioConfig.tsx`
+
+Audio device listing and test-microphone panel.
+
+## Packaging
+
+### `electron-builder.yml`
+
+Packaging rules, exclusions, unpack rules, and extra resources.
+
+### `resources/bin/win32/voiceflow-ctrl-win-helper.exe`
+
+Compiled native helper that must ship with packaged Windows builds.

@@ -1,97 +1,118 @@
-# IPC Channel Reference
+# IPC Channels
 
-All channels defined in `src/shared/constants.ts` as the `IPC` object.
+All channels are defined in `src/shared/constants.ts`.
 
-## Audio
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `audio:data` | Renderer → Main | `ipcMain.on` | Raw WAV ArrayBuffer + format string |
-| `audio:level` | Main → Renderer | broadcast | Audio level updates (unused currently) |
+## Active Recording Channels
 
-## Recording Control
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `recording:start` | Main → Renderer | broadcast | Tells renderer to start capturing audio |
-| `recording:stop` | Main → Renderer | broadcast | Tells renderer to stop + send WAV |
-| `recording:toggle` | — | — | Defined but unused (toggle is main-process-only) |
-| `recording:state` | Main → Renderer | broadcast | State change: `'idle'`/`'recording'`/`'processing'` |
-| `recording:getState` | Renderer → Main | `ipcMain.handle` | Pull current state (belt-and-suspenders sync) |
+| Channel | Direction | Purpose |
+| --- | --- | --- |
+| `recording:start` | main -> renderer | begin microphone capture for a session |
+| `recording:stop` | main -> renderer | finalize WAV and send audio |
+| `recording:abort` | main -> renderer | force-reset a session |
+| `recording:state` | main -> renderer | sync `idle`, `recording`, `processing` |
+| `recording:captureStarted` | renderer -> main | renderer confirmed microphone setup |
+| `recording:captureFailed` | renderer -> main | renderer failed to start capture |
+| `recording:noAudio` | renderer -> main | stop completed but there was no usable audio |
+| `recording:getState` | renderer -> main (`invoke`) | pull current runtime state on mount |
 
-## Transcription
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `transcribe:run` | Renderer → Main | `ipcMain.handle` | Direct transcription call (used by diagnostics) |
-| `transcription:cancel` | Renderer → Main | `ipcMain.on` | Cancel in-progress transcription |
-| `transcription:result` | Main → Renderer | broadcast | Transcription text result |
-| `transcription:error` | Main → Renderer | broadcast | Transcription error message |
+## Audio And Transcription
+
+| Channel | Direction | Purpose |
+| --- | --- | --- |
+| `audio:data` | renderer -> main | WAV payload for a session |
+| `transcribe:run` | renderer -> main (`invoke`) | direct transcription call used by diagnostics |
+| `transcription:cancel` | renderer -> main | abort active transcription/pipeline |
+| `transcription:result` | main -> renderer | raw transcribed text |
+| `transcription:error` | main -> renderer | user-visible transcription/pipeline error |
 
 ## Commands
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `command:executed` | Main → Renderer | broadcast | Parsed segments after execution |
+
+| Channel | Direction | Purpose |
+| --- | --- | --- |
+| `command:executed` | main -> renderer | parsed segments after execution |
 
 ## Settings
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `settings:get` | Renderer → Main | `ipcMain.handle` | Get single setting by key |
-| `settings:set` | Renderer → Main | `ipcMain.handle` | Set single setting (triggers side effects) |
-| `settings:getAll` | Renderer → Main | `ipcMain.handle` | Get all settings |
-| `settings:reset` | Renderer → Main | `ipcMain.handle` | Reset all to defaults |
 
-## Models
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `model:list` | Renderer → Main | `ipcMain.handle` | List available whisper models |
-| `model:download` | Renderer → Main | `ipcMain.handle` | Download a model by name |
-| `model:downloadProgress` | Main → Renderer | broadcast | Download progress `{ modelName, percent }` |
+| Channel | Direction | Purpose |
+| --- | --- | --- |
+| `settings:get` | renderer -> main (`invoke`) | read one setting |
+| `settings:getAll` | renderer -> main (`invoke`) | read all settings |
+| `settings:set` | renderer -> main (`invoke`) | update one setting |
+| `settings:reset` | renderer -> main (`invoke`) | reset to defaults |
 
-## App
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `app:status` | Renderer → Main | `ipcMain.handle` | Get app status (transcription ready?) |
-| `app:quit` | Renderer → Main | `ipcMain.send` | Quit the app |
-| `app:showSettings` | Renderer → Main | `ipcMain.send` | Show settings window |
+## App And Diagnostics
 
-## Window
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `window:minimize` | Renderer → Main | — | Minimize window |
-| `window:close` | Renderer → Main | — | Close window |
+| Channel | Direction | Purpose |
+| --- | --- | --- |
+| `app:status` | renderer -> main (`invoke`) | diagnostic app status payload |
+| `app:quit` | renderer -> main | exit the app |
+| `app:showSettings` | renderer -> main | bring settings window forward |
+| `app:openLogs` | renderer -> main (`invoke`) | open the logs folder |
+| `diagnostic:run` | renderer -> main (`invoke`) | run system diagnostic checks |
+| `diagnostic:transcribeTest` | renderer -> main (`invoke`) | transcribe a local test WAV |
+| `log:event` | renderer/preload -> main | append an external log line to the unified log |
 
-## Diagnostics
-| Channel | Direction | Type | Description |
-|---------|-----------|------|-------------|
-| `diagnostic:run` | Renderer → Main | `ipcMain.handle` | Run system diagnostics, returns string[] |
-| `diagnostic:transcribeTest` | Renderer → Main | `ipcMain.handle` | Test transcription with WAV buffer |
+## Reserved Or Currently Unused Channels
 
-## Preload Bridge Methods
+These names still exist in `constants.ts`, but they are not part of the main active flow today:
 
-All exposed via `contextBridge.exposeInMainWorld('voiceflow', api)` in `src/preload/index.ts`.
+- `audio:level`
+- `recording:toggle`
+- `audio:devices`
+- `window:minimize`
+- `window:close`
 
-| Method | IPC Pattern | Description |
-|--------|-------------|-------------|
-| `onRecordingStart(cb)` | `ipcRenderer.on` → cleanup fn | Listen for recording start |
-| `onRecordingStop(cb)` | `ipcRenderer.on` → cleanup fn | Listen for recording stop |
-| `onRecordingState(cb)` | `ipcRenderer.on` → cleanup fn | Listen for state changes |
-| `sendAudioData(buffer, format)` | `ipcRenderer.send` | Send WAV data to main |
-| `cancelTranscription()` | `ipcRenderer.send` | Cancel in-progress transcription |
-| `transcribe(buffer, format?)` | `ipcRenderer.invoke` | Direct transcription call |
-| `onTranscriptionResult(cb)` | `ipcRenderer.on` → cleanup fn | Listen for transcription results |
-| `onTranscriptionError(cb)` | `ipcRenderer.on` → cleanup fn | Listen for transcription errors |
-| `onCommandExecuted(cb)` | `ipcRenderer.on` → cleanup fn | Listen for command execution |
-| `getSettings()` | `ipcRenderer.invoke` | Get all settings |
-| `getSetting(key)` | `ipcRenderer.invoke` | Get single setting |
-| `setSetting(key, value)` | `ipcRenderer.invoke` | Set single setting |
-| `resetSettings()` | `ipcRenderer.invoke` | Reset all settings |
-| `listModels()` | `ipcRenderer.invoke` | List whisper models |
-| `downloadModel(name)` | `ipcRenderer.invoke` | Download a model |
-| `onModelProgress(cb)` | `ipcRenderer.on` → cleanup fn | Model download progress |
-| `getRecordingState()` | `ipcRenderer.invoke` | Pull current recording state |
-| `getAppStatus()` | `ipcRenderer.invoke` | Get app status |
-| `quit()` | `ipcRenderer.send` | Quit app |
-| `showSettings()` | `ipcRenderer.send` | Show settings window |
-| `runDiagnostic()` | `ipcRenderer.invoke` | Run diagnostics |
-| `testTranscription(wav)` | `ipcRenderer.invoke` | Test transcription |
-| `openExternal(url)` | `shell.openExternal` | Open URL in browser |
+Keep that distinction clear if you extend the IPC layer. A defined constant is not automatically a live feature.
 
-All `on*` methods return a cleanup function. Renderer components call cleanup in `useEffect` return.
+## Preload API
+
+The renderer consumes IPC through `window.voiceflow`.
+
+### Recording
+
+- `onRecordingStart(callback)`
+- `onRecordingStop(callback)`
+- `onRecordingAbort(callback)`
+- `onRecordingState(callback)`
+- `getRecordingState()`
+- `sendAudioData(payload)`
+- `notifyRecordingCaptureStarted(payload)`
+- `notifyRecordingCaptureFailed(payload)`
+- `notifyRecordingNoAudio(payload)`
+
+### Transcription
+
+- `cancelTranscription()`
+- `transcribe(audioBuffer, format?)`
+- `onTranscriptionResult(callback)`
+- `onTranscriptionError(callback)`
+
+### Commands
+
+- `onCommandExecuted(callback)`
+
+### Settings
+
+- `getSettings()`
+- `getSetting(key)`
+- `setSetting(key, value)`
+- `resetSettings()`
+
+### App
+
+- `getAppStatus()`
+- `quit()`
+- `showSettings()`
+- `openLogsFolder()`
+
+### Diagnostics
+
+- `runDiagnostic()`
+- `testTranscription(wavBuffer)`
+
+### Logging And Shell
+
+- `logEvent(payload)`
+- `openExternal(url)`
+
+All `on*` methods return a cleanup function and should be unsubscribed in `useEffect` cleanup handlers.

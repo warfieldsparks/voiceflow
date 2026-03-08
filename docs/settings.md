@@ -1,59 +1,153 @@
-# Settings System
+# Settings
+
+VoiceFlow stores user settings with `electron-store`.
 
 ## Storage
-`electron-store` with JSON Schema validation. File: `%APPDATA%/voiceflow/` on Windows.
+
+Settings are persisted in the app's Electron `userData` directory as:
+
+```text
+voiceflow-settings.json
+```
+
+The log file is separate and lives under:
+
+```text
+userData/logs/
+```
 
 ## Default Settings
-```typescript
+
+```ts
 {
   hotkey: 'Alt+Z',
   hotkeyMode: 'hold',
-  transcription: { mode: 'groq', groqApiKey: '', localModel: 'small.en' },
-  commands: { detectionMode: 'contextual', prefixWord: 'command', literalEscape: 'literal', customCommands: [] },
-  audio: { inputDeviceId: 'default', silenceThreshold: 0.02, autoStopAfterSilence: 5000 },
-  ui: { overlayPosition: 'top', showWaveform: true, soundFeedback: true, startMinimized: false, launchAtLogin: false },
-  typing: { speed: 0 },
+  transcription: {
+    mode: 'groq',
+    groqApiKey: '',
+  },
+  commands: {
+    detectionMode: 'contextual',
+    prefixWord: 'command',
+    literalEscape: 'literal',
+    customCommands: [],
+  },
+  audio: {
+    inputDeviceId: 'default',
+    silenceThreshold: 0.02,
+    autoStopAfterSilence: 5000,
+  },
+  ui: {
+    overlayPosition: 'top',
+    showWaveform: true,
+    soundFeedback: true,
+    startMinimized: false,
+    launchAtLogin: false,
+  },
+  typing: {
+    speed: 0,
+  },
 }
 ```
 
-## Types
-```typescript
-type TranscriptionMode = 'local' | 'groq';
-type HotkeyMode = 'toggle' | 'hold';
-type CommandDetectionMode = 'contextual' | 'prefix';
-type RecordingState = 'idle' | 'recording' | 'processing';
-type CommandAction = { type: 'key', key } | { type: 'combo', keys[] } | { type: 'text', text } | { type: 'sequence', actions[] } | { type: 'modifier', modifier };
-```
+## Settings Areas
 
-## Schema Validation
-Settings validated against schema in `SettingsSchema.ts`. Invalid configs cleared automatically (`clearInvalidConfig: true`).
+### General
 
-## Migration
-On startup, `migrateSettings()` in `SettingsStore.ts` removes stale fields:
-- `transcription.apiKey` — removed (was for OpenAI)
-- `transcription.useGpu` — removed (GPU acceleration removed)
-- `transcription.mode === 'cloud'` — reset to default `'groq'`
+- start minimized to tray
+- launch at login
+- sound feedback
+- waveform visibility
+- overlay position
+- typing speed
 
-## Reactive Side Effects
-When settings change via `SETTINGS_SET` IPC handler:
-- **Hotkey changed** → `updateHotkey()` re-registers keyboard hook
-- **Hotkey mode changed** → `updateHotkeyMode()` switches toggle/hold
-- **Transcription mode changed** → `shutdownWhisperServer()` to restart
+### Hotkeys
 
-## Global Hotkeys
+- preset selection
+- hold vs toggle mode
 
-### Why uiohook-napi?
-Electron's `globalShortcut` cannot intercept Win/Meta key. `uiohook-napi` provides OS-level hooks.
+### Commands
 
-### Available Presets
-| ID | Keys | Description |
-|----|------|-------------|
-| `Alt+Z` | Alt + Z | Default — quick two-key |
-| `Ctrl+Win` | Ctrl + Meta | Wispr Flow style |
-| `Ctrl+Shift+Space` | Ctrl + Shift + Space | Classic |
-| `Ctrl+Alt+Space` | Ctrl + Alt + Space | WhisperWriter style |
-| `F9` | F9 | Single key |
+- contextual vs prefix detection
+- prefix word
+- literal escape word
+- custom commands
 
-### Recording Modes
-- **Hold** (default): Hold hotkey → recording starts. Release → stops and transcribes.
-- **Toggle**: Press to start, press again to stop.
+### Whisper
+
+- Groq API key only
+
+### Audio
+
+- input device selection
+- microphone test UI
+- silence threshold
+- auto-stop-after-silence
+
+### Diagnostics
+
+- app status
+- test transcription
+- logs shortcut
+- quit actions
+
+## Runtime Side Effects
+
+Some setting writes trigger immediate runtime changes.
+
+### `hotkey`
+
+Changing the hotkey calls `updateHotkey()` and re-registers the runtime shortcut.
+
+### `hotkeyMode`
+
+Changing the mode calls `updateHotkeyMode()` and updates hold/toggle behavior without restarting the app.
+
+## Migration Rules
+
+The settings store performs a small manual migration pass to clean up old installs.
+
+Fields removed from older versions:
+
+- `transcription.apiKey`
+- `transcription.useGpu`
+- `transcription.localModel`
+
+Old modes remapped:
+
+- `cloud` -> `groq`
+- `local` -> `groq`
+
+## Important Implementation Detail
+
+`SettingsSchema.ts` exists as a structured description of the current setting shapes, but the runtime store currently relies on:
+
+- defaults
+- explicit writes
+- targeted migration
+
+It does not use strict config auto-clearing. That is deliberate because aggressive validation previously caused destructive resets.
+
+## Current Limitations
+
+These settings are persisted, but not all of them are fully wired into the main runtime yet.
+
+### `launchAtLogin`
+
+The toggle is stored and shown in the UI, but the current codebase does not yet call Electron login-item APIs to register startup with the OS.
+
+### Audio Capture Preferences
+
+The `Audio` tab stores:
+
+- selected input device
+- silence threshold
+- auto-stop timing
+
+Today:
+
+- the `Test Microphone` tool uses the selected device
+- the main overlay recorder still requests the default microphone directly
+- silence threshold and auto-stop values are stored but not yet enforced by the main recording pipeline
+
+Documenting that honestly is better than implying the runtime already honors those settings end to end.
