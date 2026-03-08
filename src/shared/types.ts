@@ -74,6 +74,7 @@ export interface VoiceFlowSettings {
 // ── IPC Payloads ──
 
 export interface AudioData {
+  sessionId: number;
   buffer: ArrayBuffer;
   format: string;
   duration: number;
@@ -81,9 +82,49 @@ export interface AudioData {
 
 export type RecordingState = 'idle' | 'recording' | 'processing';
 
+export interface RecordingStatus {
+  state: RecordingState;
+  sessionId: number | null;
+}
+
+export interface RecordingControlPayload {
+  sessionId: number;
+  reason?: string;
+}
+
+export interface RecordingCaptureStartedPayload {
+  sessionId: number;
+  sampleRate: number;
+  trackLabel?: string;
+  channelCount?: number;
+}
+
+export interface RecordingCaptureFailedPayload {
+  sessionId: number;
+  message: string;
+  errorName?: string;
+}
+
+export interface RecordingNoAudioPayload {
+  sessionId: number;
+  chunkCount: number;
+  sampleCount: number;
+  reason: string;
+}
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface LogEventPayload {
+  level: LogLevel;
+  tag: string;
+  message: string;
+  details?: unknown;
+  source?: 'main' | 'renderer' | 'preload';
+}
+
 export interface AppStatus {
   recording: RecordingState;
   transcriptionReady: boolean;
+  logFilePath?: string;
   lastError?: string;
 }
-

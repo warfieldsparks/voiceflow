@@ -7,6 +7,10 @@ const log = createLogger('window-manager');
 let overlayWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 
+// Overlay readiness tracking
+let overlayReadyResolve: (() => void) | null = null;
+let overlayReadyPromise: Promise<void> | null = null;
+
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 /**
@@ -33,10 +37,33 @@ function getRendererUrl(hash = ''): string {
 
 // ── Overlay Window ──
 
+function initOverlayReadyPromise(): void {
+  overlayReadyPromise = new Promise<void>((resolve) => {
+    overlayReadyResolve = resolve;
+  });
+
+  // Safety timeout — resolve after 5s even if did-finish-load never fires
+  setTimeout(() => {
+    if (overlayReadyResolve) {
+      log.warn('Overlay ready timeout — resolving after 5s');
+      overlayReadyResolve();
+      overlayReadyResolve = null;
+    }
+  }, 5000);
+}
+
 export function createOverlayWindow(): BrowserWindow {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     return overlayWindow;
   }
+
+  if (overlayWindow === null) {
+    // Fresh creation — no warning needed
+  } else {
+    log.warn('Overlay window was destroyed — recreating');
+  }
+
+  initOverlayReadyPromise();
 
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth } = primaryDisplay.workAreaSize;
@@ -70,17 +97,45 @@ export function createOverlayWindow(): BrowserWindow {
 
   overlayWindow.setIgnoreMouseEvents(false);
 
+  overlayWindow.webContents.on('did-finish-load', () => {
+    if (overlayReadyResolve) {
+      overlayReadyResolve();
+      overlayReadyResolve = null;
+    }
+  });
+
   overlayWindow.on('closed', () => {
     overlayWindow = null;
+    // Reset readiness so next creation sets up a new promise
+    overlayReadyResolve = null;
+    overlayReadyPromise = null;
   });
 
   // Log load errors
   overlayWindow.webContents.on('did-fail-load', (_e, code, desc) => {
     log.error(`Overlay failed to load: ${code} ${desc}`);
+    // Resolve the ready promise anyway so callers don't hang
+    if (overlayReadyResolve) {
+      overlayReadyResolve();
+      overlayReadyResolve = null;
+    }
   });
 
   log.info('Overlay window created');
   return overlayWindow;
+}
+
+/**
+ * Wait for the overlay window to finish loading.
+ * If the overlay doesn't exist, creates it and waits.
+ */
+export async function waitForOverlayReady(): Promise<void> {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    createOverlayWindow();
+  }
+  if (overlayReadyPromise) {
+    await overlayReadyPromise;
+  }
 }
 
 export function showOverlay(): void {

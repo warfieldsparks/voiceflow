@@ -7,7 +7,8 @@ const log = createLogger('transcription');
 
 export async function transcribe(
   audioBuffer: ArrayBuffer,
-  format = 'wav'
+  format = 'wav',
+  signal?: AbortSignal
 ): Promise<TranscriptionResult> {
   const settings = getSetting('transcription');
   const provider = new GroqProvider(settings.groqApiKey);
@@ -21,7 +22,7 @@ export async function transcribe(
   const start = Date.now();
 
   try {
-    const result = await provider.transcribe(audioBuffer, format);
+    const result = await provider.transcribe(audioBuffer, format, signal);
     log.info(`Transcription complete in ${Date.now() - start}ms: "${result.text}"`);
     return result;
   } catch (err) {

@@ -7,14 +7,21 @@ export const IPC = {
   // Recording control
   RECORDING_START: 'recording:start',
   RECORDING_STOP: 'recording:stop',
+  RECORDING_ABORT: 'recording:abort',
   RECORDING_TOGGLE: 'recording:toggle',
   RECORDING_STATE: 'recording:state',
+  RECORDING_CAPTURE_STARTED: 'recording:captureStarted',
+  RECORDING_CAPTURE_FAILED: 'recording:captureFailed',
+  RECORDING_NO_AUDIO: 'recording:noAudio',
 
   // Transcription
   TRANSCRIBE: 'transcribe:run',
   TRANSCRIPTION_CANCEL: 'transcription:cancel',
   TRANSCRIPTION_RESULT: 'transcription:result',
   TRANSCRIPTION_ERROR: 'transcription:error',
+
+  // Logging
+  LOG_EVENT: 'log:event',
 
   // Commands
   COMMAND_EXECUTED: 'command:executed',
@@ -29,6 +36,7 @@ export const IPC = {
   APP_STATUS: 'app:status',
   APP_QUIT: 'app:quit',
   APP_SHOW_SETTINGS: 'app:showSettings',
+  APP_OPEN_LOGS: 'app:openLogs',
 
   // Audio devices
   AUDIO_DEVICES: 'audio:devices',

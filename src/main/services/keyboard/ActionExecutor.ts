@@ -23,13 +23,24 @@ export class ActionExecutor {
    */
   async execute(result: ParseResult): Promise<void> {
     this.pendingModifier = null;
+    let lastWasPaste = false;
 
     for (const segment of result.segments) {
       if (segment.type === 'text') {
         await this.executeText(segment.value);
+        lastWasPaste = this.textInjector.isInstantMode();
       } else if (segment.command) {
+        // After a clipboard paste, wait for the target app to process it
+        // before sending key commands. Prevents "hello enter" from firing
+        // Enter before the paste lands.
+        if (lastWasPaste) {
+          await new Promise((r) => setTimeout(r, 50));
+        }
         await this.executeAction(segment.command.action);
+        lastWasPaste = false;
       }
+      // Small inter-segment delay for reliability
+      await new Promise((r) => setTimeout(r, 15));
     }
   }
 

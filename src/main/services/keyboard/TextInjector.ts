@@ -18,6 +18,10 @@ export class TextInjector {
     this.typingSpeed = speed;
   }
 
+  isInstantMode(): boolean {
+    return this.typingSpeed === 0;
+  }
+
   async type(text: string): Promise<void> {
     if (!text) return;
 

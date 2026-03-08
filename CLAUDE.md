@@ -2,6 +2,10 @@
 
 Desktop voice dictation with verbal commands. Electron + TypeScript + React. Hold hotkey, speak, text appears in active window.
 
+## BUILD RULE — DO NOT BUILD WITHOUT PERMISSION
+
+NEVER run `npm run build`, `npx electron-builder`, or upload to gofile without explicit user approval. When changes are complete: write a summary of all changes, ask the user if there's anything else or if you should build. Wait for their go-ahead.
+
 ## WORKING BUILD — DO NOT BREAK
 
 This version (v1.0.0, ~83MB installer) is confirmed working end-to-end on Windows.

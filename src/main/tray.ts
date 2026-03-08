@@ -9,6 +9,7 @@ let tray: Tray | null = null;
 
 interface TrayCallbacks {
   onToggleRecording: () => void;
+  onAbortSession: () => void;
   onShowSettings: () => void;
   onQuit: () => void;
 }
@@ -51,12 +52,27 @@ export function updateTrayState(state: RecordingState, callbacks: TrayCallbacks)
 function updateTrayMenu(state: RecordingState, callbacks: TrayCallbacks): void {
   if (!tray) return;
 
-  const menu = Menu.buildFromTemplate([
+  const recordingLabel =
+    state === 'recording' ? 'Stop Recording' :
+    state === 'processing' ? 'Cancel Processing' :
+    'Start Recording';
+
+  const menuItems: Electron.MenuItemConstructorOptions[] = [
     {
-      label: state === 'recording' ? 'Stop Recording' : 'Start Recording',
-      enabled: state !== 'processing',
+      label: recordingLabel,
+      enabled: true,
       click: callbacks.onToggleRecording,
     },
+  ];
+
+  if (state !== 'idle') {
+    menuItems.push({
+      label: 'Abort Current Session',
+      click: callbacks.onAbortSession,
+    });
+  }
+
+  menuItems.push(
     { type: 'separator' },
     {
       label: 'Settings...',
@@ -71,8 +87,10 @@ function updateTrayMenu(state: RecordingState, callbacks: TrayCallbacks): void {
     {
       label: 'Quit',
       click: callbacks.onQuit,
-    },
-  ]);
+    }
+  );
+
+  const menu = Menu.buildFromTemplate(menuItems);
 
   tray.setContextMenu(menu);
 }

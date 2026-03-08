@@ -1,10 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Button from '../common/Button';
+import type { AppStatus } from '../../../shared/types';
 
 export default function DiagnosticPanel() {
   const [logs, setLogs] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [status, setStatus] = useState<AppStatus | null>(null);
+  const [openingLogs, setOpeningLogs] = useState(false);
+  const [quitting, setQuitting] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const pcmRef = useRef<Float32Array[]>([]);
@@ -14,6 +18,12 @@ export default function DiagnosticPanel() {
   };
 
   const clearLogs = () => setLogs([]);
+
+  useEffect(() => {
+    window.voiceflow.getAppStatus()
+      .then((nextStatus: AppStatus) => setStatus(nextStatus))
+      .catch(() => {});
+  }, []);
 
   const runDiagnostic = async () => {
     setRunning(true);
@@ -29,7 +39,33 @@ export default function DiagnosticPanel() {
       addLog(`[ERROR] Diagnostic call failed: ${err.message}`);
     }
 
+    try {
+      const nextStatus = await window.voiceflow.getAppStatus();
+      setStatus(nextStatus);
+    } catch {
+      // Ignore status refresh failures in diagnostics UI.
+    }
+
     setRunning(false);
+  };
+
+  const openLogsFolder = async () => {
+    setOpeningLogs(true);
+
+    try {
+      const logPath = await window.voiceflow.openLogsFolder();
+      addLog(`[INFO] Opened logs folder for: ${logPath}`);
+    } catch (err: any) {
+      addLog(`[ERROR] Failed to open logs folder: ${err.message}`);
+    } finally {
+      setOpeningLogs(false);
+    }
+  };
+
+  const quitApp = () => {
+    setQuitting(true);
+    addLog('[INFO] Quit requested from diagnostics panel');
+    window.voiceflow.quit();
   };
 
   const testMicrophone = async () => {
@@ -111,6 +147,12 @@ export default function DiagnosticPanel() {
         Test each component of the voice pipeline to find what's not working.
       </p>
 
+      <div style={{ marginBottom: 16 }}>
+        <div className="form-hint">
+          Persistent log file: {status?.logFilePath || 'Not initialized yet'}
+        </div>
+      </div>
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <Button variant="primary" size="md" onClick={runDiagnostic} disabled={running}>
           {running ? 'Running...' : 'Check System'}
@@ -120,6 +162,12 @@ export default function DiagnosticPanel() {
         </Button>
         <Button variant="secondary" size="sm" onClick={clearLogs}>
           Clear
+        </Button>
+        <Button variant="secondary" size="sm" onClick={openLogsFolder} disabled={openingLogs}>
+          {openingLogs ? 'Opening...' : 'Open Logs Folder'}
+        </Button>
+        <Button variant="danger" size="sm" onClick={quitApp} disabled={quitting}>
+          {quitting ? 'Quitting...' : 'Quit VoiceFlow'}
         </Button>
       </div>
 

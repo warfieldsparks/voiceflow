@@ -51,6 +51,21 @@ export default function CommandEditor({
     onChange(commands.filter((_, i) => i !== index));
   };
 
+  const describeAction = (action: CommandAction): string => {
+    switch (action.type) {
+      case 'text':
+        return `Type: ${action.text}`;
+      case 'key':
+        return `Key: ${action.key}`;
+      case 'combo':
+        return `Combo: ${action.keys.join('+')}`;
+      case 'sequence':
+        return `Sequence (${action.actions.length} actions)`;
+      case 'modifier':
+        return `Modifier: ${action.modifier}`;
+    }
+  };
+
   return (
     <div className="settings-section">
       <h3>Command Detection</h3>
@@ -103,7 +118,7 @@ export default function CommandEditor({
               <span className="command-phrase">"{cmd.phrase}"</span>
               <span className="command-arrow">→</span>
               <span className="command-action">
-                {cmd.action.type === 'text' ? `Type: ${cmd.action.text}` : `Key: ${cmd.action.key}`}
+                {describeAction(cmd.action)}
               </span>
               <button className="command-remove" onClick={() => removeCommand(i)}>
                 ×

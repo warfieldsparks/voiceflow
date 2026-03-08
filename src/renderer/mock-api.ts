@@ -14,8 +14,14 @@ const mockApi = {
   // Recording
   onRecordingStart: noop,
   onRecordingStop: noop,
+  onRecordingAbort: noop,
   onRecordingState: noop,
   sendAudioData: () => {},
+  notifyRecordingCaptureStarted: () => {},
+  notifyRecordingCaptureFailed: () => {},
+  notifyRecordingNoAudio: () => {},
+  cancelTranscription: () => {},
+  getRecordingState: async () => ({ state: 'idle', sessionId: null }),
 
   // Transcription
   transcribe: async () => ({ success: true, data: { text: 'hello world period' } }),
@@ -52,6 +58,9 @@ const mockApi = {
   getAppStatus: async () => ({ transcriptionReady: true }),
   quit: () => {},
   showSettings: () => {},
+  openLogsFolder: async () => '',
+  logEvent: () => {},
+  openExternal: async () => {},
 };
 
 // Install mock if not running in Electron

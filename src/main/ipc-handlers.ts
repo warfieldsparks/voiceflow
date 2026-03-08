@@ -1,13 +1,27 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { app, ipcMain, BrowserWindow, shell } from 'electron';
+import { dirname } from 'path';
 import { IPC } from '../shared/constants';
 import { transcribe, isTranscriptionReady } from './services/transcription/TranscriptionService';
 import { getSettings, getSetting, setSetting, setSettings, resetSettings } from './services/settings/SettingsStore';
 import { updateHotkey, updateHotkeyMode, getCurrentHotkey, getCurrentMode } from './globalHotkey';
-import { createLogger } from './utils/logger';
+import { createLogger, getLogFilePath, logExternalEvent } from './utils/logger';
+import { createSettingsWindow } from './window-manager';
+import type { LogEventPayload } from '../shared/types';
 
 const log = createLogger('ipc');
 
 export function registerIpcHandlers(): void {
+  ipcMain.on(IPC.LOG_EVENT, (event, payload: LogEventPayload) => {
+    logExternalEvent({
+      ...payload,
+      source: payload?.source || 'renderer',
+      details: {
+        rendererDetails: payload?.details,
+        senderId: event.sender.id,
+      },
+    });
+  });
+
   // ── Transcription ──
   ipcMain.handle(IPC.TRANSCRIBE, async (_event, audioBuffer: ArrayBuffer, format?: string) => {
     try {
@@ -54,7 +68,35 @@ export function registerIpcHandlers(): void {
   // ── App status ──
   ipcMain.handle(IPC.APP_STATUS, async () => {
     const transcriptionReady = await isTranscriptionReady();
-    return { transcriptionReady };
+    return {
+      recording: 'idle',
+      transcriptionReady,
+      logFilePath: getLogFilePath() || undefined,
+    };
+  });
+
+  ipcMain.on(IPC.APP_QUIT, () => {
+    log.info('Quit requested from renderer');
+    app.quit();
+  });
+
+  ipcMain.on(IPC.APP_SHOW_SETTINGS, () => {
+    log.info('Settings window requested from renderer');
+    createSettingsWindow();
+  });
+
+  ipcMain.handle(IPC.APP_OPEN_LOGS, async () => {
+    const logFilePath = getLogFilePath();
+    if (!logFilePath) {
+      throw new Error('Log file path is not available yet.');
+    }
+
+    const result = await shell.openPath(dirname(logFilePath));
+    if (result) {
+      throw new Error(result);
+    }
+
+    return logFilePath;
   });
 
   // ── Diagnostics ──
@@ -77,6 +119,7 @@ export function registerIpcHandlers(): void {
       results.push(`[INFO] Active hotkey: ${activeHotkey || 'none'}`);
       results.push(`[INFO] Hotkey mode: ${activeMode}`);
       results.push(`[OK] Using uiohook-napi (supports Win key + hold-to-record)`);
+      results.push(`[INFO] Log file: ${getLogFilePath() || 'not initialized yet'}`);
 
       // 3. Platform info
       results.push(`[INFO] Platform: ${process.platform}`);
@@ -137,11 +180,16 @@ export function registerIpcHandlers(): void {
 
 /**
  * Send a message to all renderer windows.
+ * Each window is attempted independently — a destroyed window won't break others.
  */
 export function broadcastToRenderers(channel: string, ...args: any[]): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(channel, ...args);
+    try {
+      if (!win.isDestroyed()) {
+        win.webContents.send(channel, ...args);
+      }
+    } catch (err) {
+      log.warn(`broadcastToRenderers: failed to send "${channel}" to window: ${(err as Error).message}`);
     }
   }
 }

@@ -15,6 +15,7 @@ export default function SettingsPanel() {
   const [activeTab, setActiveTab] = useState<Tab>('diagnostic');
   const { settings, loading, updateSetting, resetAll } = useSettings();
   const [saved, setSaved] = useState(false);
+  const [quitting, setQuitting] = useState(false);
 
   if (loading || !settings) {
     return <div className="settings-loading">Loading settings...</div>;
@@ -37,6 +38,11 @@ export default function SettingsPanel() {
   const handleUpdateSetting = async (key: string, value: any) => {
     await updateSetting(key as any, value);
     showSaved();
+  };
+
+  const handleQuit = () => {
+    setQuitting(true);
+    window.voiceflow.quit();
   };
 
   return (
@@ -62,6 +68,12 @@ export default function SettingsPanel() {
           <Button variant="danger" size="sm" onClick={resetAll}>
             Reset All Settings
           </Button>
+          <Button variant="danger" size="sm" className="settings-quit-btn" onClick={handleQuit} disabled={quitting}>
+            {quitting ? 'Turning Off...' : 'Turn Off VoiceFlow'}
+          </Button>
+          <div className="settings-footer-hint">
+            Stops the background process, tray icon, and global hotkeys.
+          </div>
         </div>
       </div>
 
